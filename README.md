@@ -1,6 +1,6 @@
 # Paperwork
 
-A Progressive Web App for local PDF triage. See the full spec in the project notes; this repo currently implements through **Stage 2** of the development roadmap.
+A Progressive Web App for local PDF triage. See the full spec in the project notes; this repo currently implements through **Stage 3** of the development roadmap.
 
 ## Stage 1 — Foundational File System Access
 
@@ -17,7 +17,17 @@ Confirmed working on Android Chrome: `showDirectoryPicker()` opens the native fo
 - Renders thumbnails into a horizontally scrollable strip (`#thumbnail-strip`), one item per PDF, with filename and size as caption.
 - Caches thumbnails in IndexedDB (`idb.js`), keyed by folder name + filename. A cached entry is reused only if the file's size and `lastModified` still match — anything new or edited gets re-rendered.
 - Shows a progress bar while thumbnails are being generated (cache hits are instant; only misses call into PDF.js).
-- Tapping a thumbnail selects it and shows its name/page count in the status line — the full-page viewer itself is Stage 3.
+- Tapping a thumbnail opens it in the Stage 3 full-page viewer.
+
+## Stage 3 — Main Viewer
+
+- Tapping a thumbnail opens a fullscreen viewer (`#viewer`) rendering the current page at high resolution (`pdf-viewer.js`), scaled for the device's pixel ratio.
+- **Horizontal swipe**: next/previous page within the open document.
+- **Vertical swipe**: next/previous document, in the same order as the thumbnail strip.
+- **Pinch**: zoom 1x–5x; while zoomed, a single finger pans instead of swiping to navigate.
+- **Rotate button**: rotates the current page 90° per tap (view-only — not yet written back to the file; that's Stage 5's page-editing work).
+- Swipes and rotation are handled with raw Pointer Events (no gesture library), since this stays a plain HTML/CSS/JS app with no build step.
+- Navigating to a different page or document resets zoom/pan; switching documents reloads the PDF (freeing the previous one) but stays on the same page-navigation session while flicking through one document's pages.
 
 Folder handle persistence across sessions (skip the picker on repeat launches) is Stage 4, not yet built — each launch currently requires picking the folder again, but repeat picks of the *same* folder reuse cached thumbnails via IndexedDB.
 
@@ -45,6 +55,9 @@ A GitHub Actions workflow (`.github/workflows/deploy.yml`) deploys this repo's c
 2. Open the deployed URL in Chrome on Android.
 3. Tap "Choose inbox folder…" and confirm the folder picker, file listing, and thumbnails all work.
 4. Pick the same folder again and confirm thumbnails appear instantly (cache hit) instead of re-rendering.
+5. Tap a thumbnail and confirm the fullscreen viewer opens; try horizontal swipe (pages), vertical swipe (documents), pinch-zoom, and the rotate button.
+
+If you've already installed Paperwork to your home screen from an earlier stage and an update doesn't seem to take effect, the installed app (a WebAPK) can get stuck on stale cached files. Uninstalling and reinstalling via "Add to Home screen" is the most reliable fix — more reliable than in-place "Clear cache"/"Clear storage" from Android's App Info screen, which has been inconsistent in testing.
 
 If `showDirectoryPicker` is unsupported, the page disables the button and shows an explicit message instead of failing silently.
 

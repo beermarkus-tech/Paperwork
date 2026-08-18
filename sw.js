@@ -1,11 +1,13 @@
-const CACHE_NAME = "paperwork-shell-v4";
+const CACHE_NAME = "paperwork-shell-v5";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./app.css",
   "./app.js",
   "./idb.js",
+  "./pdfjs.js",
   "./pdf-thumbnails.js",
+  "./pdf-viewer.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

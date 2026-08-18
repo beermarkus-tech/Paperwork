@@ -1,11 +1,19 @@
 import { getCachedThumbnail, putCachedThumbnail } from "./idb.js";
 import { renderFirstPageThumbnail } from "./pdf-thumbnails.js";
+import { loadDocument, renderPageToCanvas } from "./pdf-viewer.js";
 
 const pickBtn = document.getElementById("pick-folder-btn");
 const statusEl = document.getElementById("status");
 const progressEl = document.getElementById("progress");
 const resultsEl = document.getElementById("results");
 const stripEl = document.getElementById("thumbnail-strip");
+
+const viewerEl = document.getElementById("viewer");
+const viewerStageEl = document.getElementById("viewer-stage");
+const viewerCanvas = document.getElementById("viewer-canvas");
+const viewerIndicator = document.getElementById("viewer-indicator");
+const viewerCloseBtn = document.getElementById("viewer-close-btn");
+const viewerRotateBtn = document.getElementById("viewer-rotate-btn");
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -31,7 +39,7 @@ async function collectPdfEntries(dirHandle) {
   return entries;
 }
 
-function buildThumbnailItem(entry) {
+function buildThumbnailItem(entry, onOpen) {
   const item = document.createElement("div");
   item.className = "thumb-item";
 
@@ -54,8 +62,7 @@ function buildThumbnailItem(entry) {
       el.classList.remove("selected");
     }
     item.classList.add("selected");
-    const pages = entry.pageCount ? `, ${entry.pageCount} page${entry.pageCount === 1 ? "" : "s"}` : "";
-    statusEl.textContent = `Selected "${entry.name}"${pages}. (Full-page viewer arrives in Stage 3.)`;
+    onOpen();
   });
 
   return { item, imgWrap };
@@ -117,6 +124,202 @@ async function generateThumbnails(folderName, entries, elements) {
   progressEl.hidden = true;
 }
 
+// --- Main viewer ---
+
+const viewerState = {
+  entries: [],
+  index: 0,
+  pdf: null,
+  loadingTask: null,
+  pageNumber: 1,
+  rotationByPage: new Map(),
+  zoom: 1,
+  panX: 0,
+  panY: 0,
+};
+
+function applyViewerTransform() {
+  viewerCanvas.style.transform = `translate(${viewerState.panX}px, ${viewerState.panY}px) scale(${viewerState.zoom})`;
+}
+
+function resetZoomPan() {
+  viewerState.zoom = 1;
+  viewerState.panX = 0;
+  viewerState.panY = 0;
+  applyViewerTransform();
+}
+
+async function renderCurrentPage() {
+  const entry = viewerState.entries[viewerState.index];
+  const rotation = viewerState.rotationByPage.get(viewerState.pageNumber) || 0;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const maxWidth = viewerStageEl.clientWidth * dpr;
+  const maxHeight = viewerStageEl.clientHeight * dpr;
+
+  await renderPageToCanvas(
+    viewerState.pdf,
+    viewerState.pageNumber,
+    rotation,
+    viewerCanvas,
+    maxWidth,
+    maxHeight,
+  );
+
+  viewerIndicator.textContent = `${entry.name} — page ${viewerState.pageNumber} of ${viewerState.pdf.numPages}`;
+}
+
+async function openDocumentAt(index) {
+  if (viewerState.loadingTask) {
+    const oldTask = viewerState.loadingTask;
+    viewerState.loadingTask = null;
+    viewerState.pdf = null;
+    await oldTask.destroy().catch(() => {});
+  }
+
+  viewerState.index = index;
+  viewerState.pageNumber = 1;
+  viewerState.rotationByPage = new Map();
+  resetZoomPan();
+
+  const entry = viewerState.entries[index];
+  viewerIndicator.textContent = `${entry.name} — loading…`;
+
+  const { pdf, loadingTask } = await loadDocument(entry.file);
+  viewerState.pdf = pdf;
+  viewerState.loadingTask = loadingTask;
+  await renderCurrentPage();
+}
+
+function openViewer(entries, index) {
+  viewerState.entries = entries;
+  viewerEl.hidden = false;
+  openDocumentAt(index).catch((err) => {
+    console.error("Failed to open document in viewer:", err);
+    viewerIndicator.textContent = `⚠️ ${err.name || "Error"}: ${err.message || err}`;
+  });
+}
+
+async function closeViewer() {
+  viewerEl.hidden = true;
+  if (viewerState.loadingTask) {
+    const task = viewerState.loadingTask;
+    viewerState.loadingTask = null;
+    viewerState.pdf = null;
+    await task.destroy().catch(() => {});
+  }
+}
+
+function goToPage(delta) {
+  if (!viewerState.pdf) return;
+  const next = viewerState.pageNumber + delta;
+  if (next < 1 || next > viewerState.pdf.numPages) return;
+  viewerState.pageNumber = next;
+  resetZoomPan();
+  renderCurrentPage().catch((err) => console.error("Failed to render page:", err));
+}
+
+function goToDocument(delta) {
+  const next = viewerState.index + delta;
+  if (next < 0 || next >= viewerState.entries.length) return;
+  openDocumentAt(next).catch((err) => console.error("Failed to open document:", err));
+}
+
+viewerCloseBtn.addEventListener("click", closeViewer);
+
+viewerRotateBtn.addEventListener("click", () => {
+  if (!viewerState.pdf) return;
+  const current = viewerState.rotationByPage.get(viewerState.pageNumber) || 0;
+  viewerState.rotationByPage.set(viewerState.pageNumber, (current + 90) % 360);
+  resetZoomPan();
+  renderCurrentPage().catch((err) => console.error("Failed to render page:", err));
+});
+
+// Touch gestures: pinch to zoom, single-finger pan when zoomed,
+// horizontal swipe for pages, vertical swipe for documents.
+const pointers = new Map();
+let pinchStartDist = 0;
+let pinchStartZoom = 1;
+let dragStart = null;
+let panStart = null;
+
+function pointerDistance(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+viewerStageEl.addEventListener("pointerdown", (e) => {
+  viewerStageEl.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (pointers.size === 1) {
+    dragStart = { x: e.clientX, y: e.clientY };
+    panStart = { x: viewerState.panX, y: viewerState.panY };
+  } else if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinchStartDist = pointerDistance(a, b);
+    pinchStartZoom = viewerState.zoom;
+    dragStart = null;
+  }
+});
+
+viewerStageEl.addEventListener("pointermove", (e) => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    if (pinchStartDist > 0) {
+      const rawZoom = pinchStartZoom * (pointerDistance(a, b) / pinchStartDist);
+      viewerState.zoom = Math.min(Math.max(rawZoom, 1), 5);
+      applyViewerTransform();
+    }
+    return;
+  }
+
+  if (pointers.size === 1) {
+    const p = [...pointers.values()][0];
+    if (!dragStart) {
+      dragStart = { x: p.x, y: p.y };
+      panStart = { x: viewerState.panX, y: viewerState.panY };
+    }
+    if (viewerState.zoom > 1.02) {
+      viewerState.panX = panStart.x + (p.x - dragStart.x);
+      viewerState.panY = panStart.y + (p.y - dragStart.y);
+      applyViewerTransform();
+    }
+  }
+});
+
+function endPointer(e) {
+  const wasSingle = pointers.size === 1 && pointers.has(e.pointerId);
+  const lastPos = pointers.get(e.pointerId);
+  pointers.delete(e.pointerId);
+
+  if (wasSingle && dragStart && viewerState.zoom <= 1.02 && lastPos) {
+    const dx = lastPos.x - dragStart.x;
+    const dy = lastPos.y - dragStart.y;
+    const SWIPE_THRESHOLD = 50;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) > SWIPE_THRESHOLD) {
+      if (Math.abs(dx) > Math.abs(dy)) {
+        goToPage(dx < 0 ? 1 : -1);
+      } else {
+        goToDocument(dy < 0 ? 1 : -1);
+      }
+    }
+  }
+
+  if (pointers.size < 2 && viewerState.zoom < 1.05) {
+    resetZoomPan();
+  }
+  if (pointers.size === 0) {
+    dragStart = null;
+  }
+}
+
+viewerStageEl.addEventListener("pointerup", endPointer);
+viewerStageEl.addEventListener("pointercancel", endPointer);
+
+// --- Folder setup ---
+
 async function handlePickFolder() {
   statusEl.textContent = "Waiting for folder selection…";
   try {
@@ -132,8 +335,8 @@ async function handlePickFolder() {
       return;
     }
 
-    const elements = entries.map((entry) => {
-      const { item, imgWrap } = buildThumbnailItem(entry);
+    const elements = entries.map((entry, index) => {
+      const { item, imgWrap } = buildThumbnailItem(entry, () => openViewer(entries, index));
       stripEl.appendChild(item);
       return { item, imgWrap };
     });
