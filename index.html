@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Paperwork</title>
+  <meta name="theme-color" content="#1a2b4a" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+  <header>
+    <h1>Paperwork</h1>
+    <p class="subtitle">Stage 1 spike &mdash; folder access check</p>
+  </header>
+
+  <main>
+    <section id="setup">
+      <button id="pick-folder-btn" type="button">Choose inbox folder&hellip;</button>
+      <p id="status" role="status">No folder selected yet.</p>
+    </section>
+
+    <section id="results" hidden>
+      <h2>PDFs found</h2>
+      <ul id="file-list"></ul>
+    </section>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>

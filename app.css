@@ -1,0 +1,109 @@
+:root {
+  color-scheme: light dark;
+  --navy: #1a2b4a;
+  --paper: #f4f1ea;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--paper);
+  color: #1a1a1a;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  background: var(--navy);
+  color: var(--paper);
+  padding: 1rem 1.25rem;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+main {
+  flex: 1;
+  padding: 1.25rem;
+  max-width: 640px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+button {
+  font-size: 1rem;
+  padding: 0.75rem 1.25rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: var(--navy);
+  color: var(--paper);
+  cursor: pointer;
+  width: 100%;
+}
+
+button:active {
+  opacity: 0.85;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#status {
+  margin-top: 0.75rem;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+#results {
+  margin-top: 1.5rem;
+}
+
+#file-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+#file-list li {
+  padding: 0.6rem 0.1rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  font-size: 0.95rem;
+  word-break: break-word;
+}
+
+#file-list li .size {
+  color: #666;
+  font-size: 0.8rem;
+  display: block;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #14141a;
+    color: #eee;
+  }
+
+  #file-list li {
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  #file-list li .size {
+    color: #aaa;
+  }
+}
