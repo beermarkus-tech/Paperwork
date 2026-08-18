@@ -9,7 +9,8 @@ const THUMBNAIL_WIDTH = 220;
 
 export async function renderFirstPageThumbnail(file) {
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+  const pdf = await loadingTask.promise;
   try {
     const page = await pdf.getPage(1);
     const baseViewport = page.getViewport({ scale: 1 });
@@ -29,6 +30,6 @@ export async function renderFirstPageThumbnail(file) {
 
     return { blob, pageCount: pdf.numPages };
   } finally {
-    await pdf.destroy();
+    await loadingTask.destroy();
   }
 }
