@@ -1,7 +1,11 @@
+import { getCachedThumbnail, putCachedThumbnail } from "./idb.js";
+import { renderFirstPageThumbnail } from "./pdf-thumbnails.js";
+
 const pickBtn = document.getElementById("pick-folder-btn");
 const statusEl = document.getElementById("status");
+const progressEl = document.getElementById("progress");
 const resultsEl = document.getElementById("results");
-const fileListEl = document.getElementById("file-list");
+const stripEl = document.getElementById("thumbnail-strip");
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -15,34 +19,99 @@ function formatBytes(bytes) {
   return `${value.toFixed(1)} ${units[unitIndex]}`;
 }
 
-async function scanFolderForPdfs(dirHandle) {
-  const pdfs = [];
+async function collectPdfEntries(dirHandle) {
+  const entries = [];
   for await (const [name, handle] of dirHandle.entries()) {
     if (handle.kind === "file" && name.toLowerCase().endsWith(".pdf")) {
       const file = await handle.getFile();
-      pdfs.push({ name, size: file.size });
+      entries.push({ name, file, size: file.size, lastModified: file.lastModified });
     }
   }
-  pdfs.sort((a, b) => a.name.localeCompare(b.name));
-  return pdfs;
+  entries.sort((a, b) => a.name.localeCompare(b.name));
+  return entries;
 }
 
-function renderPdfList(pdfs) {
-  fileListEl.innerHTML = "";
-  if (pdfs.length === 0) {
-    resultsEl.hidden = true;
-    return;
+function buildThumbnailItem(entry) {
+  const item = document.createElement("div");
+  item.className = "thumb-item";
+
+  const imgWrap = document.createElement("div");
+  imgWrap.className = "thumb-image";
+  item.appendChild(imgWrap);
+
+  const caption = document.createElement("div");
+  caption.className = "thumb-caption";
+  caption.textContent = entry.name;
+  item.appendChild(caption);
+
+  const size = document.createElement("div");
+  size.className = "thumb-size";
+  size.textContent = formatBytes(entry.size);
+  item.appendChild(size);
+
+  item.addEventListener("click", () => {
+    for (const el of stripEl.querySelectorAll(".thumb-item.selected")) {
+      el.classList.remove("selected");
+    }
+    item.classList.add("selected");
+    const pages = entry.pageCount ? `, ${entry.pageCount} page${entry.pageCount === 1 ? "" : "s"}` : "";
+    statusEl.textContent = `Selected "${entry.name}"${pages}. (Full-page viewer arrives in Stage 3.)`;
+  });
+
+  return { item, imgWrap };
+}
+
+function setThumbnailImage(imgWrap, blob) {
+  const url = URL.createObjectURL(blob);
+  const img = document.createElement("img");
+  img.src = url;
+  img.alt = "";
+  img.loading = "lazy";
+  imgWrap.replaceChildren(img);
+}
+
+async function generateThumbnails(folderName, entries, elements) {
+  progressEl.max = entries.length;
+  progressEl.value = 0;
+  progressEl.hidden = false;
+
+  for (let i = 0; i < entries.length; i += 1) {
+    const entry = entries[i];
+    const { imgWrap } = elements[i];
+    const key = `${folderName}/${entry.name}`;
+
+    statusEl.textContent = `Rendering thumbnails… ${i + 1} / ${entries.length}`;
+
+    let cached = await getCachedThumbnail(key);
+    const isFresh =
+      cached && cached.size === entry.size && cached.lastModified === entry.lastModified;
+
+    if (isFresh) {
+      entry.pageCount = cached.pageCount;
+      setThumbnailImage(imgWrap, cached.thumbnail);
+    } else {
+      try {
+        const { blob, pageCount } = await renderFirstPageThumbnail(entry.file);
+        entry.pageCount = pageCount;
+        setThumbnailImage(imgWrap, blob);
+        await putCachedThumbnail({
+          key,
+          size: entry.size,
+          lastModified: entry.lastModified,
+          pageCount,
+          thumbnail: blob,
+        });
+      } catch (err) {
+        console.error(`Failed to render thumbnail for ${entry.name}:`, err);
+        imgWrap.textContent = "⚠️";
+        imgWrap.classList.add("thumb-error");
+      }
+    }
+
+    progressEl.value = i + 1;
   }
-  for (const pdf of pdfs) {
-    const li = document.createElement("li");
-    const sizeSpan = document.createElement("span");
-    sizeSpan.className = "size";
-    sizeSpan.textContent = formatBytes(pdf.size);
-    li.textContent = pdf.name;
-    li.appendChild(sizeSpan);
-    fileListEl.appendChild(li);
-  }
-  resultsEl.hidden = false;
+
+  progressEl.hidden = true;
 }
 
 async function handlePickFolder() {
@@ -50,9 +119,25 @@ async function handlePickFolder() {
   try {
     const dirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
     statusEl.textContent = `Scanning "${dirHandle.name}"…`;
-    const pdfs = await scanFolderForPdfs(dirHandle);
-    statusEl.textContent = `Found ${pdfs.length} PDF${pdfs.length === 1 ? "" : "s"} in "${dirHandle.name}".`;
-    renderPdfList(pdfs);
+
+    const entries = await collectPdfEntries(dirHandle);
+    statusEl.textContent = `Found ${entries.length} PDF${entries.length === 1 ? "" : "s"} in "${dirHandle.name}".`;
+
+    stripEl.innerHTML = "";
+    if (entries.length === 0) {
+      resultsEl.hidden = true;
+      return;
+    }
+
+    const elements = entries.map((entry) => {
+      const { item, imgWrap } = buildThumbnailItem(entry);
+      stripEl.appendChild(item);
+      return { item, imgWrap };
+    });
+    resultsEl.hidden = false;
+
+    await generateThumbnails(dirHandle.name, entries, elements);
+    statusEl.textContent = `Found ${entries.length} PDF${entries.length === 1 ? "" : "s"} in "${dirHandle.name}".`;
   } catch (err) {
     if (err.name === "AbortError") {
       statusEl.textContent = "Folder selection cancelled.";

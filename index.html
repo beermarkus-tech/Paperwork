@@ -13,21 +13,22 @@
 <body>
   <header>
     <h1>Paperwork</h1>
-    <p class="subtitle">Stage 1 spike &mdash; folder access check</p>
+    <p class="subtitle">Stage 2 &mdash; thumbnails &amp; caching</p>
   </header>
 
   <main>
     <section id="setup">
       <button id="pick-folder-btn" type="button">Choose inbox folder&hellip;</button>
       <p id="status" role="status">No folder selected yet.</p>
+      <progress id="progress" max="1" value="0" hidden></progress>
     </section>
 
     <section id="results" hidden>
       <h2>PDFs found</h2>
-      <ul id="file-list"></ul>
+      <div id="thumbnail-strip"></div>
     </section>
   </main>
 
-  <script src="./app.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>

@@ -1,13 +1,17 @@
-const CACHE_NAME = "paperwork-shell-v1";
+const CACHE_NAME = "paperwork-shell-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./app.css",
   "./app.js",
+  "./idb.js",
+  "./pdf-thumbnails.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/icon-maskable-512.png",
+  "./vendor/pdfjs/pdf.min.mjs",
+  "./vendor/pdfjs/pdf.worker.min.mjs",
 ];
 
 self.addEventListener("install", (event) => {
