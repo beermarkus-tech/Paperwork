@@ -163,6 +163,10 @@ button:disabled {
   touch-action: none;
 }
 
+#viewer[hidden] {
+  display: none;
+}
+
 #viewer-toolbar {
   display: flex;
   align-items: center;
