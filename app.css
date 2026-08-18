@@ -129,6 +129,14 @@ button:disabled {
   background: #fbe2e2;
 }
 
+.thumb-error-text {
+  font-size: 0.55rem;
+  line-height: 1.2;
+  padding: 0.4rem;
+  color: #7a1f1f;
+  word-break: break-word;
+}
+
 .thumb-caption {
   margin-top: 0.35rem;
   font-size: 0.8rem;
@@ -157,6 +165,10 @@ button:disabled {
 
   .thumb-image.thumb-error {
     background: #4a2323;
+  }
+
+  .thumb-error-text {
+    color: #ff9d9d;
   }
 
   .thumb-size {

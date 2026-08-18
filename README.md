@@ -54,4 +54,4 @@ If `showDirectoryPicker` is unsupported, the page disables the button and shows 
 
 ## Vendored dependencies
 
-`vendor/pdfjs/` contains the minified PDF.js browser build (`pdf.min.mjs` + `pdf.worker.min.mjs`), vendored rather than CDN-loaded so the app keeps working fully offline once installed. See `vendor/pdfjs/LICENSE` (Apache-2.0).
+`vendor/pdfjs/` contains the minified PDF.js browser build (`pdf.min.js` + `pdf.worker.min.js`), vendored rather than CDN-loaded so the app keeps working fully offline once installed. See `vendor/pdfjs/LICENSE` (Apache-2.0). Named `.js` rather than pdf.js's usual `.mjs` to avoid depending on the host correctly mapping that extension to a JavaScript MIME type — module-ness comes from how a script is loaded (`type="module"`, `import`, worker `{type:"module"}`), not the file extension, so this rename is purely defensive.

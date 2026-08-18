@@ -103,8 +103,11 @@ async function generateThumbnails(folderName, entries, elements) {
         });
       } catch (err) {
         console.error(`Failed to render thumbnail for ${entry.name}:`, err);
-        imgWrap.textContent = "⚠️";
         imgWrap.classList.add("thumb-error");
+        const errorText = document.createElement("div");
+        errorText.className = "thumb-error-text";
+        errorText.textContent = `⚠️ ${err.name || "Error"}: ${err.message || err}`;
+        imgWrap.replaceChildren(errorText);
       }
     }
 
