@@ -298,7 +298,8 @@ button:disabled {
   color: #1a1a1a;
 }
 
-#rename-date-btn {
+#rename-date-btn,
+#rename-apply-btn {
   width: auto;
   flex: 0 0 auto;
   padding: 0.6rem 0.8rem;
@@ -327,21 +328,7 @@ button:disabled {
   background: rgba(255, 255, 255, 0.28);
 }
 
-#rename-action-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-#rename-apply-btn {
-  width: auto;
-  flex: 0 0 auto;
-  padding: 0.6rem 1.1rem;
-  font-size: 0.95rem;
-}
-
 #rename-status {
-  flex: 1;
   min-width: 0;
   font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.75);
