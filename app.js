@@ -11,7 +11,7 @@ import { renameFileHandle } from "./file-ops.js";
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 24;
+const APP_VERSION = 25;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
@@ -364,6 +364,14 @@ function setRenameStatus(kind, message) {
   renameStatusEl.className = kind || "";
 }
 
+// state: "saving" | "success" | null. Mirrors the rotation save indicator's
+// spinner/checkmark pattern, but on the rename button itself rather than a
+// separate status line, since the button already reads as a checkmark.
+function setRenameButtonState(state) {
+  renameApplyBtn.classList.remove("saving", "success");
+  if (state) renameApplyBtn.classList.add(state);
+}
+
 // Matches a date prefix this same UI would have inserted, so a later pick
 // replaces it instead of stacking another date in front of it.
 const DATE_PREFIX_RE = /^(\d{4}-\d{2}-\d{2})(?: - )?/;
@@ -379,6 +387,7 @@ function applyDateToFilename(dateStr) {
 function populateRenameBar(entry) {
   renameInput.value = entry.name.replace(PDF_EXTENSION_RE, "");
   setRenameStatus(null);
+  setRenameButtonState(null);
 }
 
 // Mobile Chrome sometimes repositions the cursor right after a tap-triggered
@@ -511,6 +520,7 @@ dateModalOkBtn.addEventListener("click", () => {
 renameApplyBtn.addEventListener("click", () => {
   commitRename().catch((err) => {
     console.error("Failed to rename file:", err);
+    setRenameButtonState(null);
     setRenameStatus("error", `⚠️ ${err.message || err}`);
   });
 });
@@ -519,6 +529,8 @@ async function commitRename() {
   if (!viewerState.pdf || !currentDirHandle) return;
   const entry = viewerState.entries[viewerState.index];
   const trimmed = renameInput.value.trim();
+  setRenameStatus(null);
+  setRenameButtonState(null);
 
   if (!trimmed) {
     setRenameStatus("error", "Filename can't be empty.");
@@ -542,7 +554,7 @@ async function commitRename() {
   }
 
   renameApplyBtn.disabled = true;
-  setRenameStatus(null, "Renaming…");
+  setRenameButtonState("saving");
   try {
     entry.handle = await renameFileHandle(currentDirHandle, entry.handle, oldName, newName);
     entry.name = newName;
@@ -567,7 +579,7 @@ async function commitRename() {
       if (caption) caption.textContent = newName;
     }
 
-    setRenameStatus("success", "Renamed.");
+    setRenameButtonState("success");
   } finally {
     renameApplyBtn.disabled = false;
   }

@@ -309,6 +309,33 @@ button:disabled {
   color: #fff;
 }
 
+#rename-apply-btn {
+  position: relative;
+}
+
+#rename-apply-btn.saving {
+  color: transparent;
+}
+
+#rename-apply-btn.saving::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1rem;
+  height: 1rem;
+  margin: -0.5rem 0 0 -0.5rem;
+  border-radius: 50%;
+  border: 0.15rem solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  animation: save-status-spin 0.8s linear infinite;
+}
+
+#rename-apply-btn.success {
+  background: rgba(111, 207, 151, 0.25);
+  color: #6fcf97;
+}
+
 #rename-chips {
   display: flex;
   flex-wrap: wrap;
