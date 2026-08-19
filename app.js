@@ -363,7 +363,38 @@ renameInput.addEventListener("focus", () => {
   setTimeout(() => renameInput.select(), 0);
 });
 
+// Matches a date prefix this same UI would have inserted, so a later pick
+// replaces it instead of stacking another date in front of it.
+const DATE_PREFIX_RE = /^(\d{4}-\d{2}-\d{2})(?: - )?/;
+
+function getTodayDateString() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function applyDateToFilename(dateStr) {
+  const current = renameInput.value.trim();
+  const match = current.match(DATE_PREFIX_RE);
+  const rest = match ? current.slice(match[0].length) : current;
+  renameInput.value = rest ? `${dateStr} - ${rest}` : dateStr;
+  setRenameStatus(null);
+}
+
 renameDateBtn.addEventListener("click", () => {
+  // Default to whatever date is already prefixed on the filename, or today
+  // otherwise, and apply it immediately — native <input type="date"> only
+  // fires "change" when the user actually picks a different value, not when
+  // they confirm the picker's own default/current selection unmodified, so
+  // waiting for that event alone would silently do nothing in that case.
+  const current = renameInput.value.trim();
+  const match = current.match(DATE_PREFIX_RE);
+  const defaultDate = match ? match[1] : getTodayDateString();
+  renameDateInput.value = defaultDate;
+  applyDateToFilename(defaultDate);
+
   try {
     renameDateInput.showPicker();
   } catch (err) {
@@ -373,9 +404,7 @@ renameDateBtn.addEventListener("click", () => {
 
 renameDateInput.addEventListener("change", () => {
   if (!renameDateInput.value) return;
-  const current = renameInput.value.trim();
-  renameInput.value = current ? `${renameDateInput.value} - ${current}` : renameDateInput.value;
-  setRenameStatus(null);
+  applyDateToFilename(renameDateInput.value);
 });
 
 renameApplyBtn.addEventListener("click", () => {
