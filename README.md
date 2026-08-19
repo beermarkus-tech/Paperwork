@@ -1,6 +1,6 @@
 # Paperwork
 
-A Progressive Web App for local PDF triage. See the full spec in the project notes; this repo currently implements through **Stage 3** of the development roadmap.
+A Progressive Web App for local PDF triage. See the full spec in the project notes; this repo currently implements through the start of **Stage 4** of the development roadmap.
 
 ## Stage 1 — Foundational File System Access
 
@@ -29,9 +29,15 @@ Confirmed working on Android Chrome: `showDirectoryPicker()` opens the native fo
 - Swipes and rotation are handled with raw Pointer Events (no gesture library), since this stays a plain HTML/CSS/JS app with no build step.
 - Navigating to a different page or document resets zoom/pan; switching documents reloads the PDF (freeing the previous one) but stays on the same page-navigation session while flicking through one document's pages.
 
-Folder handle persistence across sessions (skip the picker on repeat launches) is Stage 4, not yet built — each launch currently requires picking the folder again, but repeat picks of the *same* folder reuse cached thumbnails via IndexedDB.
+Rotation state (which page is rotated, and by how much) now persists in memory for the current session even after navigating away from a document and back — it's keyed by filename, not wiped every time a document is reopened. It's still view-only, not written back to the file; that lands with Stage 5's page-editing work.
 
-No renaming, filing, or page editing yet — that's Stage 4 onward.
+## Stage 4 — Folder Persistence (in progress)
+
+- On a successful folder pick, the `FileSystemDirectoryHandle` itself is stored in IndexedDB (`idb.js`) — handles are structured-cloneable and this is the documented pattern for persisting File System Access API access across page loads.
+- On launch, if a handle is stored, the app calls `queryPermission()` on it (no user gesture needed for a *query*, only for a *request*): if permission is still `"granted"`, the folder loads automatically with no tap required. If Chrome has downgraded it back to `"prompt"` (typically after the browser fully restarts), the primary button changes to `Reconnect to "<folder>"…` — tapping it calls `requestPermission()`, which is allowed to show its native prompt because the tap itself is the required user gesture.
+- A second, smaller "Choose a different folder…" button is always available once a folder has loaded, so switching to a different inbox never requires losing the persisted one first.
+
+Still to come in Stage 4: the rename bar (text input, date picker, template chips), the destination-folder settings screen, and tap-to-file (rename + move).
 
 ## Running locally
 
@@ -56,6 +62,8 @@ A GitHub Actions workflow (`.github/workflows/deploy.yml`) deploys this repo's c
 3. Tap "Choose inbox folder…" and confirm the folder picker, file listing, and thumbnails all work.
 4. Pick the same folder again and confirm thumbnails appear instantly (cache hit) instead of re-rendering.
 5. Tap a thumbnail and confirm the fullscreen viewer opens; try horizontal swipe (pages), vertical swipe (documents), pinch-zoom, and the rotate button.
+6. Close the tab (or fully quit/reopen the installed app) and relaunch: the folder should either load automatically or show a "Reconnect to…" button — it shouldn't silently fall back to the empty "Choose inbox folder…" state while a folder is still stored.
+7. Tap "Choose a different folder…" and confirm you can switch to a different folder without anything getting stuck.
 
 If you've already installed Paperwork to your home screen from an earlier stage and an update doesn't seem to take effect, the installed app (a WebAPK) can get stuck on stale cached files. Uninstalling and reinstalling via "Add to Home screen" is the most reliable fix — more reliable than in-place "Clear cache"/"Clear storage" from Android's App Info screen, which has been inconsistent in testing.
 

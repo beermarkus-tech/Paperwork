@@ -1,6 +1,8 @@
 const DB_NAME = "paperwork";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const THUMBNAIL_STORE = "thumbnails";
+const META_STORE = "meta";
+const FOLDER_HANDLE_KEY = "inboxFolderHandle";
 
 let dbPromise = null;
 
@@ -12,6 +14,9 @@ function openDb() {
         const db = request.result;
         if (!db.objectStoreNames.contains(THUMBNAIL_STORE)) {
           db.createObjectStore(THUMBNAIL_STORE, { keyPath: "key" });
+        }
+        if (!db.objectStoreNames.contains(META_STORE)) {
+          db.createObjectStore(META_STORE, { keyPath: "key" });
         }
       };
       request.onsuccess = () => resolve(request.result);
@@ -36,6 +41,26 @@ export async function putCachedThumbnail(record) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(THUMBNAIL_STORE, "readwrite");
     tx.objectStore(THUMBNAIL_STORE).put(record);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function getStoredFolderHandle() {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(META_STORE, "readonly");
+    const request = tx.objectStore(META_STORE).get(FOLDER_HANDLE_KEY);
+    request.onsuccess = () => resolve(request.result ? request.result.value : null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function setStoredFolderHandle(handle) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(META_STORE, "readwrite");
+    tx.objectStore(META_STORE).put({ key: FOLDER_HANDLE_KEY, value: handle });
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });

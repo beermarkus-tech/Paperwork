@@ -63,6 +63,15 @@ button:disabled {
   cursor: not-allowed;
 }
 
+#change-folder-btn {
+  margin-top: 0.5rem;
+  background: none;
+  color: var(--navy);
+  padding: 0.4rem 0.5rem;
+  font-size: 0.85rem;
+  text-decoration: underline;
+}
+
 #status {
   margin-top: 0.75rem;
   font-size: 0.95rem;
@@ -226,6 +235,10 @@ button:disabled {
   body {
     background: #14141a;
     color: #eee;
+  }
+
+  #change-folder-btn {
+    color: #9fb3d9;
   }
 
   .thumb-image {

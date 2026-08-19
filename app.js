@@ -1,8 +1,14 @@
-import { getCachedThumbnail, putCachedThumbnail } from "./idb.js";
+import {
+  getCachedThumbnail,
+  putCachedThumbnail,
+  getStoredFolderHandle,
+  setStoredFolderHandle,
+} from "./idb.js";
 import { renderFirstPageThumbnail } from "./pdf-thumbnails.js";
 import { loadDocument, renderPageToCanvas } from "./pdf-viewer.js";
 
 const pickBtn = document.getElementById("pick-folder-btn");
+const changeFolderBtn = document.getElementById("change-folder-btn");
 const statusEl = document.getElementById("status");
 const progressEl = document.getElementById("progress");
 const resultsEl = document.getElementById("results");
@@ -138,6 +144,21 @@ const viewerState = {
   panY: 0,
 };
 
+// Rotation is view-only for now (not yet written back to the file — see
+// Stage 5), but should still survive navigating away from a document and
+// back within the current session. Keyed by filename so it outlives a
+// document being closed and reopened; cleared when a new folder is loaded.
+let rotationsByDocument = new Map();
+
+function getRotationMapFor(entry) {
+  let map = rotationsByDocument.get(entry.name);
+  if (!map) {
+    map = new Map();
+    rotationsByDocument.set(entry.name, map);
+  }
+  return map;
+}
+
 function applyViewerTransform() {
   viewerCanvas.style.transform = `translate(${viewerState.panX}px, ${viewerState.panY}px) scale(${viewerState.zoom})`;
 }
@@ -178,10 +199,11 @@ async function openDocumentAt(index) {
 
   viewerState.index = index;
   viewerState.pageNumber = 1;
-  viewerState.rotationByPage = new Map();
-  resetZoomPan();
 
   const entry = viewerState.entries[index];
+  viewerState.rotationByPage = getRotationMapFor(entry);
+  resetZoomPan();
+
   viewerIndicator.textContent = `${entry.name} — loading…`;
 
   const { pdf, loadingTask } = await loadDocument(entry.file);
@@ -369,21 +391,19 @@ viewerStageEl.addEventListener("pointercancel", endPointer);
 
 // --- Folder setup ---
 
-async function handlePickFolder() {
-  statusEl.textContent = "Waiting for folder selection…";
-  try {
-    const dirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
-    statusEl.textContent = `Scanning "${dirHandle.name}"…`;
+let pendingReconnectHandle = null;
 
-    const entries = await collectPdfEntries(dirHandle);
-    statusEl.textContent = `Found ${entries.length} PDF${entries.length === 1 ? "" : "s"} in "${dirHandle.name}".`;
+async function loadFolder(dirHandle) {
+  statusEl.textContent = `Scanning "${dirHandle.name}"…`;
 
-    stripEl.innerHTML = "";
-    if (entries.length === 0) {
-      resultsEl.hidden = true;
-      return;
-    }
+  const entries = await collectPdfEntries(dirHandle);
+  statusEl.textContent = `Found ${entries.length} PDF${entries.length === 1 ? "" : "s"} in "${dirHandle.name}".`;
 
+  rotationsByDocument = new Map();
+  stripEl.innerHTML = "";
+  if (entries.length === 0) {
+    resultsEl.hidden = true;
+  } else {
     const elements = entries.map((entry, index) => {
       const { item, imgWrap } = buildThumbnailItem(entry, () => openViewer(entries, index));
       stripEl.appendChild(item);
@@ -393,6 +413,21 @@ async function handlePickFolder() {
 
     await generateThumbnails(dirHandle.name, entries, elements);
     statusEl.textContent = `Found ${entries.length} PDF${entries.length === 1 ? "" : "s"} in "${dirHandle.name}".`;
+  }
+
+  pendingReconnectHandle = null;
+  pickBtn.textContent = "Choose inbox folder…";
+  changeFolderBtn.hidden = false;
+}
+
+async function pickNewFolder() {
+  statusEl.textContent = "Waiting for folder selection…";
+  try {
+    const dirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    await setStoredFolderHandle(dirHandle).catch((err) => {
+      console.error("Failed to store folder handle for next launch:", err);
+    });
+    await loadFolder(dirHandle);
   } catch (err) {
     if (err.name === "AbortError") {
       statusEl.textContent = "Folder selection cancelled.";
@@ -403,13 +438,71 @@ async function handlePickFolder() {
   }
 }
 
+async function reconnectFolder(handle) {
+  statusEl.textContent = `Requesting access to "${handle.name}"…`;
+  try {
+    const permission = await handle.requestPermission({ mode: "readwrite" });
+    if (permission !== "granted") {
+      statusEl.textContent = `Access to "${handle.name}" wasn't granted. Choose a folder to continue.`;
+      pendingReconnectHandle = null;
+      pickBtn.textContent = "Choose inbox folder…";
+      return;
+    }
+    await loadFolder(handle);
+  } catch (err) {
+    statusEl.textContent = `Error: ${err.message || err}`;
+    console.error(err);
+  }
+}
+
+async function attemptAutoReconnect() {
+  let stored;
+  try {
+    stored = await getStoredFolderHandle();
+  } catch (err) {
+    console.error("Failed to read stored folder handle:", err);
+    return;
+  }
+  if (!stored || !("queryPermission" in stored)) return;
+
+  changeFolderBtn.hidden = false;
+
+  let permission;
+  try {
+    permission = await stored.queryPermission({ mode: "readwrite" });
+  } catch (err) {
+    console.error("Failed to query permission for stored folder handle:", err);
+    return;
+  }
+
+  if (permission === "granted") {
+    statusEl.textContent = `Reconnected to "${stored.name}". Scanning…`;
+    loadFolder(stored).catch((err) => {
+      statusEl.textContent = `Error: ${err.message || err}`;
+      console.error(err);
+    });
+  } else {
+    pendingReconnectHandle = stored;
+    pickBtn.textContent = `Reconnect to "${stored.name}"…`;
+    statusEl.textContent = `Tap to reconfirm access to "${stored.name}".`;
+  }
+}
+
 if (!("showDirectoryPicker" in window)) {
   statusEl.textContent =
     "This browser does not support the File System Access API (showDirectoryPicker). " +
     "Paperwork needs a Chromium browser with this API available.";
   pickBtn.disabled = true;
 } else {
-  pickBtn.addEventListener("click", handlePickFolder);
+  pickBtn.addEventListener("click", () => {
+    if (pendingReconnectHandle) {
+      reconnectFolder(pendingReconnectHandle);
+    } else {
+      pickNewFolder();
+    }
+  });
+  changeFolderBtn.addEventListener("click", pickNewFolder);
+  attemptAutoReconnect();
 }
 
 if ("serviceWorker" in navigator) {
