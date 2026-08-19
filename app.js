@@ -6,6 +6,7 @@ import {
 } from "./idb.js";
 import { renderFirstPageThumbnail } from "./pdf-thumbnails.js";
 import { loadDocument, renderPageToCanvas } from "./pdf-viewer.js";
+import { savePageRotation } from "./pdf-rotate.js";
 
 const pickBtn = document.getElementById("pick-folder-btn");
 const changeFolderBtn = document.getElementById("change-folder-btn");
@@ -20,6 +21,7 @@ const viewerCanvas = document.getElementById("viewer-canvas");
 const viewerIndicator = document.getElementById("viewer-indicator");
 const viewerCloseBtn = document.getElementById("viewer-close-btn");
 const viewerRotateBtn = document.getElementById("viewer-rotate-btn");
+const viewerSaveStatus = document.getElementById("viewer-save-status");
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -38,7 +40,7 @@ async function collectPdfEntries(dirHandle) {
   for await (const [name, handle] of dirHandle.entries()) {
     if (handle.kind === "file" && name.toLowerCase().endsWith(".pdf")) {
       const file = await handle.getFile();
-      entries.push({ name, file, size: file.size, lastModified: file.lastModified });
+      entries.push({ name, handle, file, size: file.size, lastModified: file.lastModified });
     }
   }
   entries.sort((a, b) => a.name.localeCompare(b.name));
@@ -83,6 +85,41 @@ function setThumbnailImage(imgWrap, blob) {
   imgWrap.replaceChildren(img);
 }
 
+// Maps an entry to its thumbnail-strip elements so a background save (e.g.
+// after a rotation) can refresh the thumbnail without a full folder rescan.
+const entryElements = new Map();
+let currentFolderName = null;
+
+async function renderAndCacheThumbnail(folderName, entry, imgWrap) {
+  const key = `${folderName}/${entry.name}`;
+  try {
+    const { blob, pageCount } = await renderFirstPageThumbnail(entry.file);
+    entry.pageCount = pageCount;
+    imgWrap.classList.remove("thumb-error");
+    setThumbnailImage(imgWrap, blob);
+    await putCachedThumbnail({
+      key,
+      size: entry.size,
+      lastModified: entry.lastModified,
+      pageCount,
+      thumbnail: blob,
+    });
+  } catch (err) {
+    console.error(`Failed to render thumbnail for ${entry.name}:`, err);
+    imgWrap.classList.add("thumb-error");
+    const errorText = document.createElement("div");
+    errorText.className = "thumb-error-text";
+    errorText.textContent = `⚠️ ${err.name || "Error"}: ${err.message || err}`;
+    imgWrap.replaceChildren(errorText);
+  }
+}
+
+async function refreshThumbnailFor(entry) {
+  const elements = entryElements.get(entry);
+  if (!elements || !currentFolderName) return;
+  await renderAndCacheThumbnail(currentFolderName, entry, elements.imgWrap);
+}
+
 async function generateThumbnails(folderName, entries, elements) {
   progressEl.max = entries.length;
   progressEl.value = 0;
@@ -103,25 +140,7 @@ async function generateThumbnails(folderName, entries, elements) {
       entry.pageCount = cached.pageCount;
       setThumbnailImage(imgWrap, cached.thumbnail);
     } else {
-      try {
-        const { blob, pageCount } = await renderFirstPageThumbnail(entry.file);
-        entry.pageCount = pageCount;
-        setThumbnailImage(imgWrap, blob);
-        await putCachedThumbnail({
-          key,
-          size: entry.size,
-          lastModified: entry.lastModified,
-          pageCount,
-          thumbnail: blob,
-        });
-      } catch (err) {
-        console.error(`Failed to render thumbnail for ${entry.name}:`, err);
-        imgWrap.classList.add("thumb-error");
-        const errorText = document.createElement("div");
-        errorText.className = "thumb-error-text";
-        errorText.textContent = `⚠️ ${err.name || "Error"}: ${err.message || err}`;
-        imgWrap.replaceChildren(errorText);
-      }
+      await renderAndCacheThumbnail(folderName, entry, imgWrap);
     }
 
     progressEl.value = i + 1;
@@ -172,24 +191,77 @@ function resetZoomPan() {
 
 async function renderCurrentPage() {
   const entry = viewerState.entries[viewerState.index];
-  const rotation = viewerState.rotationByPage.get(viewerState.pageNumber) || 0;
+  // Undefined (not yet in the map) tells pdf-viewer.js to use the page's own
+  // intrinsic rotation; the returned value seeds the map so it reads as an
+  // absolute rotation from here on, correctly starting from what's already
+  // on disk rather than always assuming 0.
+  const requestedRotation = viewerState.rotationByPage.get(viewerState.pageNumber);
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const maxWidth = viewerStageEl.clientWidth * dpr;
   const maxHeight = viewerStageEl.clientHeight * dpr;
 
-  await renderPageToCanvas(
+  const appliedRotation = await renderPageToCanvas(
     viewerState.pdf,
     viewerState.pageNumber,
-    rotation,
+    requestedRotation,
     viewerCanvas,
     maxWidth,
     maxHeight,
   );
+  viewerState.rotationByPage.set(viewerState.pageNumber, appliedRotation);
 
   viewerIndicator.textContent = `${entry.name} — page ${viewerState.pageNumber} of ${viewerState.pdf.numPages}`;
 }
 
+// --- Rotation persistence: debounced save + flush-on-navigate ---
+
+const ROTATION_SAVE_DEBOUNCE_MS = 2500;
+let pendingRotationSave = null; // { entry, pageNumber, rotation, timer }
+
+function setSaveStatus(state) {
+  // state: "saving" | "saved" | null
+  viewerSaveStatus.hidden = !state;
+  viewerSaveStatus.className = state ? `save-status ${state}` : "save-status";
+}
+
+function scheduleRotationSave(entry, pageNumber, rotation) {
+  if (pendingRotationSave && pendingRotationSave.timer) {
+    clearTimeout(pendingRotationSave.timer);
+  }
+  pendingRotationSave = {
+    entry,
+    pageNumber,
+    rotation,
+    timer: setTimeout(flushPendingRotationSave, ROTATION_SAVE_DEBOUNCE_MS),
+  };
+  setSaveStatus("saving");
+}
+
+async function flushPendingRotationSave() {
+  if (!pendingRotationSave) return;
+  const { entry, pageNumber, rotation, timer } = pendingRotationSave;
+  clearTimeout(timer);
+  pendingRotationSave = null;
+
+  try {
+    await savePageRotation(entry.handle, entry.file, pageNumber, rotation);
+    entry.file = await entry.handle.getFile();
+    entry.size = entry.file.size;
+    entry.lastModified = entry.file.lastModified;
+    setSaveStatus("saved");
+    refreshThumbnailFor(entry).catch((err) => {
+      console.error(`Failed to refresh thumbnail for ${entry.name}:`, err);
+    });
+  } catch (err) {
+    console.error(`Failed to save rotation for ${entry.name}:`, err);
+    setSaveStatus(null);
+    statusEl.textContent = `⚠️ Couldn't save rotation for "${entry.name}": ${err.message || err}`;
+  }
+}
+
 async function openDocumentAt(index) {
+  flushPendingRotationSave();
+
   if (viewerState.loadingTask) {
     const oldTask = viewerState.loadingTask;
     viewerState.loadingTask = null;
@@ -203,6 +275,7 @@ async function openDocumentAt(index) {
   const entry = viewerState.entries[index];
   viewerState.rotationByPage = getRotationMapFor(entry);
   resetZoomPan();
+  setSaveStatus(null);
 
   viewerIndicator.textContent = `${entry.name} — loading…`;
 
@@ -222,6 +295,7 @@ function openViewer(entries, index) {
 }
 
 async function closeViewer() {
+  flushPendingRotationSave();
   viewerEl.hidden = true;
   if (viewerState.loadingTask) {
     const task = viewerState.loadingTask;
@@ -279,9 +353,11 @@ function goToPage(delta) {
   if (!viewerState.pdf || isNavigating) return;
   const next = viewerState.pageNumber + delta;
   if (next < 1 || next > viewerState.pdf.numPages) return;
+  flushPendingRotationSave();
   animateNavigation("x", delta, async () => {
     viewerState.pageNumber = next;
     resetZoomPan();
+    setSaveStatus(null);
     await renderCurrentPage();
   }).catch((err) => console.error("Failed to render page:", err));
 }
@@ -300,9 +376,13 @@ viewerCloseBtn.addEventListener("click", closeViewer);
 viewerRotateBtn.addEventListener("click", () => {
   if (!viewerState.pdf) return;
   const current = viewerState.rotationByPage.get(viewerState.pageNumber) || 0;
-  viewerState.rotationByPage.set(viewerState.pageNumber, (current + 90) % 360);
+  const next = (current + 90) % 360;
+  viewerState.rotationByPage.set(viewerState.pageNumber, next);
   resetZoomPan();
   renderCurrentPage().catch((err) => console.error("Failed to render page:", err));
+
+  const entry = viewerState.entries[viewerState.index];
+  scheduleRotationSave(entry, viewerState.pageNumber, next);
 });
 
 // Touch gestures: pinch to zoom, single-finger pan when zoomed,
@@ -416,6 +496,8 @@ async function loadFolder(dirHandle) {
   statusEl.textContent = `Found ${entries.length} PDF${entries.length === 1 ? "" : "s"} in "${dirHandle.name}".`;
 
   rotationsByDocument = new Map();
+  entryElements.clear();
+  currentFolderName = dirHandle.name;
   stripEl.innerHTML = "";
   if (entries.length === 0) {
     resultsEl.hidden = true;
@@ -423,6 +505,7 @@ async function loadFolder(dirHandle) {
     const elements = entries.map((entry, index) => {
       const { item, imgWrap } = buildThumbnailItem(entry, () => openViewer(entries, index));
       stripEl.appendChild(item);
+      entryElements.set(entry, { item, imgWrap });
       return { item, imgWrap };
     });
     resultsEl.hidden = false;

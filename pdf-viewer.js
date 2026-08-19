@@ -7,6 +7,9 @@ export async function loadDocument(file) {
   return { pdf, loadingTask };
 }
 
+// `rotation` may be omitted (undefined), in which case pdf.js falls back to
+// the page's own intrinsic rotation. Returns the rotation actually applied,
+// so callers can seed their own state with it.
 export async function renderPageToCanvas(pdf, pageNumber, rotation, canvas, maxWidth, maxHeight) {
   const page = await pdf.getPage(pageNumber);
   const baseViewport = page.getViewport({ scale: 1, rotation });
@@ -20,4 +23,6 @@ export async function renderPageToCanvas(pdf, pageNumber, rotation, canvas, maxW
   canvas.height = Math.round(viewport.height);
   const context = canvas.getContext("2d");
   await page.render({ canvasContext: context, viewport }).promise;
+
+  return viewport.rotation;
 }

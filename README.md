@@ -25,11 +25,21 @@ Confirmed working on Android Chrome: `showDirectoryPicker()` opens the native fo
 - **Horizontal swipe**: next/previous page within the open document.
 - **Vertical swipe**: next/previous document, in the same order as the thumbnail strip.
 - **Pinch**: zoom 1x–5x; while zoomed, a single finger pans instead of swiping to navigate.
-- **Rotate button**: rotates the current page 90° per tap (view-only — not yet written back to the file; that's Stage 5's page-editing work).
+- **Rotate button**: rotates the current page 90° per tap and saves it back to the actual file (see below) — not just a view-time transform.
 - Swipes and rotation are handled with raw Pointer Events (no gesture library), since this stays a plain HTML/CSS/JS app with no build step.
 - Navigating to a different page or document resets zoom/pan; switching documents reloads the PDF (freeing the previous one) but stays on the same page-navigation session while flicking through one document's pages.
 
-Rotation state (which page is rotated, and by how much) now persists in memory for the current session even after navigating away from a document and back — it's keyed by filename, not wiped every time a document is reopened. It's still view-only, not written back to the file; that lands with Stage 5's page-editing work.
+Rotation state persists in memory for the current session even after navigating away from a document and back — it's keyed by filename, not wiped every time a document is reopened. The first time a page is displayed, its starting rotation is read from the file itself (via PDF.js's `page.rotate`) rather than always assuming 0, so a file already rotated from a previous session opens correctly oriented.
+
+### Rotation persistence (a Stage 5 feature, pulled forward)
+
+Full page-editing (split, join, delete, undo) is Stage 5, but rotation-saving was built now as an early vertical slice — UI and its real file write together, rather than mocking the interaction first — since it's small and self-contained.
+
+- Uses [pdf-lib](https://pdf-lib.js.org/) (vendored under `vendor/pdf-lib/`, MIT) to actually set the page's `/Rotate` value and write the file back out.
+- **Debounced + flush-on-navigate**: each rotate tap resets a ~2.5s timer; if you swipe to a different page/document or close the viewer before it fires, the pending rotation saves immediately instead of waiting. Rapid repeated taps only trigger one write, not one per tap.
+- A small status indicator in the viewer toolbar spins while a save is pending or in flight, and shows a checkmark once written — it's a minimal placeholder for now (see note below) and will move once more toolbar buttons arrive.
+- After a successful save, the thumbnail for that file is re-rendered and re-cached in the background, so the strip doesn't show a stale (unrotated) thumbnail after you rotate and back out.
+- Known limitation: closing the app within the debounce window, before either trigger fires, loses that specific pending change — the same tradeoff most autosave systems make.
 
 ## Stage 4 — Folder Persistence (in progress)
 
@@ -64,6 +74,7 @@ A GitHub Actions workflow (`.github/workflows/deploy.yml`) deploys this repo's c
 5. Tap a thumbnail and confirm the fullscreen viewer opens; try horizontal swipe (pages), vertical swipe (documents), pinch-zoom, and the rotate button.
 6. Close the tab (or fully quit/reopen the installed app) and relaunch: the folder should either load automatically or show a "Reconnect to…" button — it shouldn't silently fall back to the empty "Choose inbox folder…" state while a folder is still stored.
 7. Tap "Choose a different folder…" and confirm you can switch to a different folder without anything getting stuck.
+8. Rotate a page a couple of times, then either wait ~2.5s or swipe away — the status indicator should spin, then show a checkmark. Reopen that same document later (or fully reload the app) and confirm the rotation actually stuck, and that the thumbnail strip reflects the new orientation too.
 
 If you've already installed Paperwork to your home screen from an earlier stage and an update doesn't seem to take effect, the installed app (a WebAPK) can get stuck on stale cached files. Uninstalling and reinstalling via "Add to Home screen" is the most reliable fix — more reliable than in-place "Clear cache"/"Clear storage" from Android's App Info screen, which has been inconsistent in testing.
 
@@ -76,3 +87,5 @@ If `showDirectoryPicker` is unsupported, the page disables the button and shows 
 ## Vendored dependencies
 
 `vendor/pdfjs/` contains the minified PDF.js browser build (`pdf.min.js` + `pdf.worker.min.js`), vendored rather than CDN-loaded so the app keeps working fully offline once installed. See `vendor/pdfjs/LICENSE` (Apache-2.0). Named `.js` rather than pdf.js's usual `.mjs` to avoid depending on the host correctly mapping that extension to a JavaScript MIME type — module-ness comes from how a script is loaded (`type="module"`, `import`, worker `{type:"module"}`), not the file extension, so this rename is purely defensive.
+
+`vendor/pdf-lib/` contains the minified ESM build of [pdf-lib](https://pdf-lib.js.org/) (`pdf-lib.esm.min.js`), used for actually rewriting page rotation into a PDF file. See `vendor/pdf-lib/LICENSE.md` (MIT).
