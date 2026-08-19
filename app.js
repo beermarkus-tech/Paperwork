@@ -15,7 +15,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 28;
+const APP_VERSION = 29;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
@@ -684,12 +684,54 @@ function renderDestinationBar() {
   }
 }
 
-async function ensureDestinationFoldersExist(dirHandle) {
-  for (const name of destinations) {
+async function collectSubfolderNames(dirHandle) {
+  const names = [];
+  for await (const [name, handle] of dirHandle.entries()) {
+    if (handle.kind === "directory") names.push(name);
+  }
+  names.sort((a, b) => a.localeCompare(b));
+  return names;
+}
+
+// Two-way sync between the stored destinations list and the folders that
+// actually exist inside dirHandle: subfolders already sitting in the inbox
+// (created outside the app, or from a previous session with a different
+// inbox folder) are imported into the list and the viewer's destination
+// bar; anything already in the list that this particular folder doesn't
+// have yet gets created, same as before.
+async function syncDestinationsWithFolder(dirHandle) {
+  let onDisk;
+  try {
+    onDisk = await collectSubfolderNames(dirHandle);
+  } catch (err) {
+    console.error("Failed to scan for existing subfolders:", err);
+    onDisk = [];
+  }
+
+  let changed = false;
+  for (const name of onDisk) {
+    if (!destinations.includes(name)) {
+      destinations = [...destinations, name];
+      changed = true;
+    }
+  }
+  if (changed) {
+    renderDestinationsList();
+    renderDestinationBar();
     try {
-      await dirHandle.getDirectoryHandle(name, { create: true });
+      await setStoredDestinations(destinations);
     } catch (err) {
-      console.error(`Failed to ensure destination folder "${name}" exists:`, err);
+      console.error("Failed to persist destinations:", err);
+    }
+  }
+
+  for (const name of destinations) {
+    if (!onDisk.includes(name)) {
+      try {
+        await dirHandle.getDirectoryHandle(name, { create: true });
+      } catch (err) {
+        console.error(`Failed to ensure destination folder "${name}" exists:`, err);
+      }
     }
   }
 }
@@ -1147,7 +1189,7 @@ async function loadFolder(dirHandle) {
   currentFolderName = dirHandle.name;
   currentDirHandle = dirHandle;
   destinationsBtn.hidden = false;
-  ensureDestinationFoldersExist(dirHandle);
+  syncDestinationsWithFolder(dirHandle);
   stripEl.innerHTML = "";
   if (entries.length === 0) {
     resultsEl.hidden = true;
@@ -1235,7 +1277,7 @@ getStoredDestinations()
   .then((stored) => {
     destinations = stored || [];
     renderDestinationBar();
-    if (currentDirHandle) ensureDestinationFoldersExist(currentDirHandle);
+    if (currentDirHandle) syncDestinationsWithFolder(currentDirHandle);
   })
   .catch((err) => {
     console.error("Failed to read stored destinations:", err);
