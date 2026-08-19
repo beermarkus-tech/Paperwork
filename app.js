@@ -11,7 +11,7 @@ import { renameFileHandle } from "./file-ops.js";
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 22;
+const APP_VERSION = 23;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
@@ -212,7 +212,6 @@ function resetZoomPan() {
 }
 
 async function renderCurrentPage() {
-  const entry = viewerState.entries[viewerState.index];
   // Undefined (not yet in the map) tells pdf-viewer.js to use the page's own
   // intrinsic rotation; the returned value seeds the map so it reads as an
   // absolute rotation from here on, correctly starting from what's already
@@ -232,7 +231,7 @@ async function renderCurrentPage() {
   );
   viewerState.rotationByPage.set(viewerState.pageNumber, appliedRotation);
 
-  viewerIndicator.textContent = `${entry.name} — page ${viewerState.pageNumber} of ${viewerState.pdf.numPages}`;
+  viewerIndicator.textContent = `Page ${viewerState.pageNumber} of ${viewerState.pdf.numPages}`;
   updatePageNavArrows();
 }
 
@@ -310,7 +309,7 @@ async function openDocumentAt(index) {
   setSaveStatus(null);
   populateRenameBar(entry);
 
-  viewerIndicator.textContent = `${entry.name} — loading…`;
+  viewerIndicator.textContent = "Loading…";
 
   const { pdf, loadingTask } = await loadDocument(entry.file);
   viewerState.pdf = pdf;
@@ -568,7 +567,6 @@ async function commitRename() {
       if (caption) caption.textContent = newName;
     }
 
-    viewerIndicator.textContent = `${entry.name} — page ${viewerState.pageNumber} of ${viewerState.pdf.numPages}`;
     setRenameStatus("success", "Renamed.");
   } finally {
     renameApplyBtn.disabled = false;
