@@ -356,6 +356,13 @@ function populateRenameBar(entry) {
   setRenameStatus(null);
 }
 
+// Mobile Chrome sometimes repositions the cursor right after a tap-triggered
+// focus, undoing a select() called synchronously inside the focus handler —
+// deferring it a tick lets that happen first, so the selection sticks.
+renameInput.addEventListener("focus", () => {
+  setTimeout(() => renameInput.select(), 0);
+});
+
 renameDateBtn.addEventListener("click", () => {
   try {
     renameDateInput.showPicker();
