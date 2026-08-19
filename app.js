@@ -15,7 +15,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 27;
+const APP_VERSION = 28;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
@@ -404,18 +404,17 @@ function setRenameButtonState(state) {
 
 // Matches a date prefix this same UI would have inserted, so a later pick
 // replaces it instead of stacking another date in front of it. The
-// separator itself is matched loosely (any whitespace, an optional single
-// dash, any whitespace) rather than requiring the exact " - " this UI
-// writes, so a stray leftover dash from an older version — or from manually
-// edited text — gets absorbed here instead of leaving a dangling "- " with
-// nothing after it once the rest of the name is empty.
+// separator is matched loosely (any whitespace, an optional single dash,
+// any whitespace) so it absorbs both the current plain-space style and any
+// dash-separated prefix left over from an older version or manual editing —
+// applyDateToFilename always rejoins with a single space, never a dash.
 const DATE_PREFIX_RE = /^(\d{4}-\d{2}-\d{2})\s*-?\s*/;
 
 function applyDateToFilename(dateStr) {
   const current = renameInput.value.trim();
   const match = current.match(DATE_PREFIX_RE);
   const rest = (match ? current.slice(match[0].length) : current).trim();
-  renameInput.value = rest ? `${dateStr} - ${rest}` : dateStr;
+  renameInput.value = rest ? `${dateStr} ${rest}` : dateStr;
   setRenameStatus(null);
 }
 
