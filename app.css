@@ -277,6 +277,7 @@ button:disabled {
   flex: 0 0 auto;
   background: rgba(0, 0, 0, 0.6);
   padding: 0.6rem 0.75rem;
+  padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -391,22 +392,12 @@ button:disabled {
   color: #6fcf97;
 }
 
-#viewer-hint {
-  flex: 0 0 auto;
-  margin: 0;
-  padding: 0.5rem;
-  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
-  text-align: center;
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 0.85rem;
-}
-
 #destination-bar {
   flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
-  padding: 0 0.75rem 0.5rem;
+  padding: 0 0.75rem max(0.5rem, env(safe-area-inset-bottom));
 }
 
 #destination-bar:empty {
