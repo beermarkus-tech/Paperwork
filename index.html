@@ -13,7 +13,7 @@
 <body>
   <header>
     <h1>Paperwork</h1>
-    <p class="subtitle">Stage 4 &mdash; folder persistence &amp; rotation save</p>
+    <p class="subtitle">Stage 4 &mdash; folder persistence, rotation save &amp; rename</p>
   </header>
 
   <main>
@@ -41,6 +41,26 @@
       <span id="page-nav-prev" class="page-nav-arrow" aria-hidden="true" hidden>&#8249;</span>
       <canvas id="viewer-canvas"></canvas>
       <span id="page-nav-next" class="page-nav-arrow page-nav-next" aria-hidden="true" hidden>&#8250;</span>
+    </div>
+    <div id="rename-bar">
+      <div id="rename-input-row">
+        <input
+          type="text"
+          id="rename-input"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
+          aria-label="Filename"
+        />
+        <button id="rename-date-btn" type="button" aria-label="Insert date">&#128197;</button>
+        <input type="date" id="rename-date-input" class="visually-hidden-input" tabindex="-1" aria-hidden="true" />
+      </div>
+      <div id="rename-chips"></div>
+      <div id="rename-action-row">
+        <button id="rename-apply-btn" type="button">Rename</button>
+        <span id="rename-status" role="status"></span>
+      </div>
     </div>
     <p id="viewer-hint">Swipe &larr;&rarr; for pages &middot; &uarr;&darr; for documents &middot; pinch to zoom</p>
   </div>

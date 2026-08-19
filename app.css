@@ -272,6 +272,100 @@ button:disabled {
   right: 0.5rem;
 }
 
+#rename-bar {
+  flex: 0 0 auto;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+#rename-input-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+#rename-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 1rem;
+  padding: 0.6rem 0.7rem;
+  border: none;
+  border-radius: 0.4rem;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1a1a1a;
+}
+
+#rename-date-btn {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 0.6rem 0.8rem;
+  font-size: 1.2rem;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.visually-hidden-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+
+#rename-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.rename-chip {
+  width: auto;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.rename-chip:active {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+#rename-action-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+#rename-apply-btn {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.95rem;
+}
+
+#rename-status {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.75);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#rename-status.error {
+  color: #ff9d9d;
+}
+
+#rename-status.success {
+  color: #6fcf97;
+}
+
 #viewer-hint {
   flex: 0 0 auto;
   margin: 0;

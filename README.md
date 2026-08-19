@@ -28,6 +28,7 @@ Confirmed working on Android Chrome: `showDirectoryPicker()` opens the native fo
 - **Rotate button**: rotates the current page 90° per tap and saves it back to the actual file (see below) — not just a view-time transform.
 - Swipes and rotation are handled with raw Pointer Events (no gesture library), since this stays a plain HTML/CSS/JS app with no build step.
 - Navigating to a different page or document resets zoom/pan; switching documents reloads the PDF (freeing the previous one) but stays on the same page-navigation session while flicking through one document's pages.
+- Faint chevron indicators fade in on whichever edge(s) have a page to swipe to, and disappear at the start/end of a document, so a swipe that does nothing doesn't feel like it silently failed.
 
 Rotation state persists in memory for the current session even after navigating away from a document and back — it's keyed by filename, not wiped every time a document is reopened. The first time a page is displayed, its starting rotation is read from the file itself (via PDF.js's `page.rotate`) rather than always assuming 0, so a file already rotated from a previous session opens correctly oriented.
 
@@ -47,7 +48,18 @@ Full page-editing (split, join, delete, undo) is Stage 5, but rotation-saving wa
 - On launch, if a handle is stored, the app calls `queryPermission()` on it (no user gesture needed for a *query*, only for a *request*): if permission is still `"granted"`, the folder loads automatically with no tap required. If Chrome has downgraded it back to `"prompt"` (typically after the browser fully restarts), the primary button changes to `Reconnect to "<folder>"…` — tapping it calls `requestPermission()`, which is allowed to show its native prompt because the tap itself is the required user gesture.
 - A second, smaller "Choose a different folder…" button is always available once a folder has loaded, so switching to a different inbox never requires losing the persisted one first.
 
-Still to come in Stage 4: the rename bar (text input, date picker, template chips), the destination-folder settings screen, and tap-to-file (rename + move).
+### Rename bar
+
+A bar below the viewer stage, built and wired to a real on-disk rename together (same vertical-slice approach as rotation persistence):
+
+- Text field pre-filled with the current filename (extension hidden while editing, re-appended on save).
+- Calendar button opens the native date picker (via `showPicker()`, with a `.click()` fallback) and prefixes the picked date in `YYYY-MM-DD` format onto the filename.
+- Template chips append a word to the filename with one tap. The set is a fixed default for now (`Invoice`, `Receipt`, `Statement`, `Contract`, `Insurance`, `Medical`, `Tax`) — making these user-editable is deferred to the destination-folder settings screen, the next Stage 4 slice.
+- **Rename** commits immediately via `FileSystemFileHandle.move()` (`file-ops.js`), with a copy-then-delete fallback for browsers without it. Blocks on an empty name, characters illegal in filenames (`\ / : * ? " < > |`), or a name collision with another file already in the folder.
+- On success, updates everything keyed by the old filename in place: the in-session rotation map, the cached thumbnail (re-keyed without a wasted re-render, since the file content didn't change), the thumbnail strip's caption, and the viewer's own page indicator.
+- Known simplification: the thumbnail strip doesn't re-sort after a rename within the same session (it re-sorts fresh on the next folder scan) — re-sorting live would mean relocating DOM nodes and remapping indices used for document-to-document swipe navigation, and didn't seem worth the complexity yet.
+
+Still to come in Stage 4: the destination-folder settings screen and tap-to-file (rename + move in one tap).
 
 ## Running locally
 
@@ -75,6 +87,7 @@ A GitHub Actions workflow (`.github/workflows/deploy.yml`) deploys this repo's c
 6. Close the tab (or fully quit/reopen the installed app) and relaunch: the folder should either load automatically or show a "Reconnect to…" button — it shouldn't silently fall back to the empty "Choose inbox folder…" state while a folder is still stored.
 7. Tap "Choose a different folder…" and confirm you can switch to a different folder without anything getting stuck.
 8. Rotate a page a couple of times, then either wait ~2.5s or swipe away — the status indicator should spin, then show a checkmark. Reopen that same document later (or fully reload the app) and confirm the rotation actually stuck, and that the thumbnail strip reflects the new orientation too.
+9. In the rename bar, tap the calendar button and pick a date, tap a couple of template chips, edit the text, then tap **Rename**. Confirm the thumbnail strip's caption updates, back out and reopen the document to confirm the filename actually changed on disk, and check the actual file in your device's file manager if you want to be extra sure. Also try renaming to a name that already exists in the folder — it should refuse with a message rather than silently overwriting the other file.
 
 If you've already installed Paperwork to your home screen from an earlier stage and an update doesn't seem to take effect, the installed app (a WebAPK) can get stuck on stale cached files. Uninstalling and reinstalling via "Add to Home screen" is the most reliable fix — more reliable than in-place "Clear cache"/"Clear storage" from Android's App Info screen, which has been inconsistent in testing.
 

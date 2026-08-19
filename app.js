@@ -7,6 +7,7 @@ import {
 import { renderFirstPageThumbnail } from "./pdf-thumbnails.js";
 import { loadDocument, renderPageToCanvas } from "./pdf-viewer.js";
 import { savePageRotation } from "./pdf-rotate.js";
+import { renameFileHandle } from "./file-ops.js";
 
 const pickBtn = document.getElementById("pick-folder-btn");
 const changeFolderBtn = document.getElementById("change-folder-btn");
@@ -24,6 +25,12 @@ const viewerRotateBtn = document.getElementById("viewer-rotate-btn");
 const viewerSaveStatus = document.getElementById("viewer-save-status");
 const pageNavPrev = document.getElementById("page-nav-prev");
 const pageNavNext = document.getElementById("page-nav-next");
+const renameInput = document.getElementById("rename-input");
+const renameDateBtn = document.getElementById("rename-date-btn");
+const renameDateInput = document.getElementById("rename-date-input");
+const renameChipsEl = document.getElementById("rename-chips");
+const renameApplyBtn = document.getElementById("rename-apply-btn");
+const renameStatusEl = document.getElementById("rename-status");
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -91,6 +98,7 @@ function setThumbnailImage(imgWrap, blob) {
 // after a rotation) can refresh the thumbnail without a full folder rescan.
 const entryElements = new Map();
 let currentFolderName = null;
+let currentDirHandle = null;
 
 async function renderAndCacheThumbnail(folderName, entry, imgWrap) {
   const key = `${folderName}/${entry.name}`;
@@ -287,6 +295,7 @@ async function openDocumentAt(index) {
   viewerState.rotationByPage = getRotationMapFor(entry);
   resetZoomPan();
   setSaveStatus(null);
+  populateRenameBar(entry);
 
   viewerIndicator.textContent = `${entry.name} — loading…`;
 
@@ -313,6 +322,118 @@ async function closeViewer() {
     viewerState.loadingTask = null;
     viewerState.pdf = null;
     await task.destroy().catch(() => {});
+  }
+}
+
+// --- Rename bar ---
+// Template chips are a fixed default set for now; making them user-editable
+// is deferred to the destination-folder settings screen (next Stage 4 slice).
+const RENAME_CHIPS = ["Invoice", "Receipt", "Statement", "Contract", "Insurance", "Medical", "Tax"];
+const PDF_EXTENSION_RE = /\.pdf$/i;
+const ILLEGAL_FILENAME_CHARS_RE = /[\\/:*?"<>|]/;
+
+for (const chipText of RENAME_CHIPS) {
+  const chip = document.createElement("button");
+  chip.type = "button";
+  chip.className = "rename-chip";
+  chip.textContent = chipText;
+  chip.addEventListener("click", () => {
+    const current = renameInput.value.trim();
+    renameInput.value = current ? `${current} ${chipText}` : chipText;
+    renameInput.focus();
+    setRenameStatus(null);
+  });
+  renameChipsEl.appendChild(chip);
+}
+
+function setRenameStatus(kind, message) {
+  renameStatusEl.textContent = message || "";
+  renameStatusEl.className = kind || "";
+}
+
+function populateRenameBar(entry) {
+  renameInput.value = entry.name.replace(PDF_EXTENSION_RE, "");
+  setRenameStatus(null);
+}
+
+renameDateBtn.addEventListener("click", () => {
+  try {
+    renameDateInput.showPicker();
+  } catch (err) {
+    renameDateInput.click();
+  }
+});
+
+renameDateInput.addEventListener("change", () => {
+  if (!renameDateInput.value) return;
+  const current = renameInput.value.trim();
+  renameInput.value = current ? `${renameDateInput.value} - ${current}` : renameDateInput.value;
+  setRenameStatus(null);
+});
+
+renameApplyBtn.addEventListener("click", () => {
+  commitRename().catch((err) => {
+    console.error("Failed to rename file:", err);
+    setRenameStatus("error", `⚠️ ${err.message || err}`);
+  });
+});
+
+async function commitRename() {
+  if (!viewerState.pdf || !currentDirHandle) return;
+  const entry = viewerState.entries[viewerState.index];
+  const trimmed = renameInput.value.trim();
+
+  if (!trimmed) {
+    setRenameStatus("error", "Filename can't be empty.");
+    return;
+  }
+  if (ILLEGAL_FILENAME_CHARS_RE.test(trimmed)) {
+    setRenameStatus("error", `Filename can't contain \\ / : * ? " < > |`);
+    return;
+  }
+
+  const newName = `${trimmed}.pdf`;
+  const oldName = entry.name;
+  if (newName === oldName) {
+    setRenameStatus(null);
+    return;
+  }
+  const collision = viewerState.entries.some((other) => other !== entry && other.name === newName);
+  if (collision) {
+    setRenameStatus("error", `"${newName}" already exists in this folder.`);
+    return;
+  }
+
+  renameApplyBtn.disabled = true;
+  setRenameStatus(null, "Renaming…");
+  try {
+    await renameFileHandle(currentDirHandle, entry.handle, oldName, newName);
+    entry.name = newName;
+    entry.file = await entry.handle.getFile();
+    entry.size = entry.file.size;
+    entry.lastModified = entry.file.lastModified;
+
+    const oldRotationMap = rotationsByDocument.get(oldName);
+    rotationsByDocument.delete(oldName);
+    if (oldRotationMap) rotationsByDocument.set(newName, oldRotationMap);
+
+    if (currentFolderName) {
+      const oldCached = await getCachedThumbnail(`${currentFolderName}/${oldName}`);
+      if (oldCached) {
+        await putCachedThumbnail({ ...oldCached, key: `${currentFolderName}/${newName}` });
+      }
+    }
+
+    const elements = entryElements.get(entry);
+    if (elements) {
+      const caption = elements.item.querySelector(".thumb-caption");
+      if (caption) caption.textContent = newName;
+    }
+
+    viewerIndicator.textContent = `${entry.name} — page ${viewerState.pageNumber} of ${viewerState.pdf.numPages}`;
+    setRenameStatus("success", "Renamed.");
+  } finally {
+    renameApplyBtn.disabled = false;
   }
 }
 
@@ -509,6 +630,7 @@ async function loadFolder(dirHandle) {
   rotationsByDocument = new Map();
   entryElements.clear();
   currentFolderName = dirHandle.name;
+  currentDirHandle = dirHandle;
   stripEl.innerHTML = "";
   if (entries.length === 0) {
     resultsEl.hidden = true;
