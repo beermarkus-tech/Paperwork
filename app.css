@@ -97,6 +97,7 @@ button:disabled {
 }
 
 .thumb-image {
+  position: relative;
   width: 100%;
   aspect-ratio: 3 / 4;
   background: #fff;
@@ -111,6 +112,8 @@ button:disabled {
 }
 
 .thumb-image img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;

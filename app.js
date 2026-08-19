@@ -209,8 +209,8 @@ async function closeViewer() {
   }
 }
 
-const EXIT_MS = 140;
-const ENTER_MS = 200;
+const EXIT_MS = 80;
+const ENTER_MS = 120;
 let isNavigating = false;
 
 function wait(ms) {
