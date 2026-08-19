@@ -11,7 +11,7 @@ import { renameFileHandle } from "./file-ops.js";
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 20;
+const APP_VERSION = 21;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
@@ -32,14 +32,10 @@ const viewerSaveStatus = document.getElementById("viewer-save-status");
 const pageNavPrev = document.getElementById("page-nav-prev");
 const pageNavNext = document.getElementById("page-nav-next");
 const renameInput = document.getElementById("rename-input");
-const renameDateBtn = document.getElementById("rename-date-btn");
+const renameDateInput = document.getElementById("rename-date-input");
 const renameChipsEl = document.getElementById("rename-chips");
 const renameApplyBtn = document.getElementById("rename-apply-btn");
 const renameStatusEl = document.getElementById("rename-status");
-const dateModal = document.getElementById("date-modal");
-const dateModalInput = document.getElementById("date-modal-input");
-const dateModalCancelBtn = document.getElementById("date-modal-cancel-btn");
-const dateModalOkBtn = document.getElementById("date-modal-ok-btn");
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -287,7 +283,6 @@ async function flushPendingRotationSave() {
 
 async function openDocumentAt(index) {
   flushPendingRotationSave();
-  closeDateModal();
 
   if (viewerState.loadingTask) {
     const oldTask = viewerState.loadingTask;
@@ -326,7 +321,6 @@ function openViewer(entries, index) {
 
 async function closeViewer() {
   flushPendingRotationSave();
-  closeDateModal();
   viewerEl.hidden = true;
   if (viewerState.loadingTask) {
     const task = viewerState.loadingTask;
@@ -362,18 +356,6 @@ function setRenameStatus(kind, message) {
   renameStatusEl.className = kind || "";
 }
 
-function populateRenameBar(entry) {
-  renameInput.value = entry.name.replace(PDF_EXTENSION_RE, "");
-  setRenameStatus(null);
-}
-
-// Mobile Chrome sometimes repositions the cursor right after a tap-triggered
-// focus, undoing a select() called synchronously inside the focus handler —
-// deferring it a tick lets that happen first, so the selection sticks.
-renameInput.addEventListener("focus", () => {
-  setTimeout(() => renameInput.select(), 0);
-});
-
 // Matches a date prefix this same UI would have inserted, so a later pick
 // replaces it instead of stacking another date in front of it.
 const DATE_PREFIX_RE = /^(\d{4}-\d{2}-\d{2})(?: - )?/;
@@ -394,33 +376,28 @@ function applyDateToFilename(dateStr) {
   setRenameStatus(null);
 }
 
-// A small self-built modal (rather than relying on <input type="date">'s own
-// showPicker() + change event) so OK vs. Cancel is an explicit, reliable
-// signal we control — the native change event only fires on an actual value
-// change, not on "confirmed the shown default/current value unmodified",
-// which is exactly the case that needs to count as a real OK here.
-renameDateBtn.addEventListener("click", () => {
-  const current = renameInput.value.trim();
-  const match = current.match(DATE_PREFIX_RE);
-  dateModalInput.value = match ? match[1] : getTodayDateString();
-  dateModal.hidden = false;
-});
-
-function closeDateModal() {
-  dateModal.hidden = true;
+function populateRenameBar(entry) {
+  renameInput.value = entry.name.replace(PDF_EXTENSION_RE, "");
+  const match = renameInput.value.match(DATE_PREFIX_RE);
+  renameDateInput.value = match ? match[1] : getTodayDateString();
+  setRenameStatus(null);
 }
 
-dateModalCancelBtn.addEventListener("click", closeDateModal);
-
-dateModal.addEventListener("click", (e) => {
-  if (e.target === dateModal) closeDateModal();
+// Mobile Chrome sometimes repositions the cursor right after a tap-triggered
+// focus, undoing a select() called synchronously inside the focus handler —
+// deferring it a tick lets that happen first, so the selection sticks.
+renameInput.addEventListener("focus", () => {
+  setTimeout(() => renameInput.select(), 0);
 });
 
-dateModalOkBtn.addEventListener("click", () => {
-  if (dateModalInput.value) {
-    applyDateToFilename(dateModalInput.value);
-  }
-  closeDateModal();
+// A plain, always-visible date input: tapping it opens the platform's own
+// date picker directly, with no extra UI of ours layered on top, and its own
+// OK/Cancel decide whether anything happens — Cancel (or dismissing without
+// choosing) leaves the value, and therefore the filename, untouched. Only a
+// real value change fires "change", so this only fires on a genuine pick.
+renameDateInput.addEventListener("change", () => {
+  if (!renameDateInput.value) return;
+  applyDateToFilename(renameDateInput.value);
 });
 
 renameApplyBtn.addEventListener("click", () => {
