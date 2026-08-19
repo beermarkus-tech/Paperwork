@@ -404,6 +404,12 @@ function updateFolderButtons() {
 }
 
 async function loadFolder(dirHandle) {
+  // Flip the button/link state immediately — before the (potentially slow)
+  // scan and thumbnail generation — since access is already confirmed at
+  // this point and there's no reason to keep showing "Reconnect…" while it runs.
+  pendingReconnectHandle = null;
+  updateFolderButtons();
+
   statusEl.textContent = `Scanning "${dirHandle.name}"…`;
 
   const entries = await collectPdfEntries(dirHandle);
@@ -424,9 +430,6 @@ async function loadFolder(dirHandle) {
     await generateThumbnails(dirHandle.name, entries, elements);
     statusEl.textContent = `Found ${entries.length} PDF${entries.length === 1 ? "" : "s"} in "${dirHandle.name}".`;
   }
-
-  pendingReconnectHandle = null;
-  updateFolderButtons();
 }
 
 async function pickNewFolder() {
