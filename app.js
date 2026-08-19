@@ -7,6 +7,8 @@ import {
   setStoredDestinations,
   getStoredChipLabels,
   setStoredChipLabels,
+  getChipsRowCollapsed,
+  setChipsRowCollapsed,
 } from "./idb.js";
 import { renderFirstPageThumbnail } from "./pdf-thumbnails.js";
 import { loadDocument, renderPageToCanvas } from "./pdf-viewer.js";
@@ -16,7 +18,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 31;
+const APP_VERSION = 32;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
@@ -53,6 +55,8 @@ const deletePageBtn = document.getElementById("delete-page-btn");
 const renameInput = document.getElementById("rename-input");
 const renameDateBtn = document.getElementById("rename-date-btn");
 const renameChipsEl = document.getElementById("rename-chips");
+const renameChipsRow = document.getElementById("rename-chips-row");
+const chipsToggleBtn = document.getElementById("chips-toggle-btn");
 const editChipsBtn = document.getElementById("edit-chips-btn");
 const renameApplyBtn = document.getElementById("rename-apply-btn");
 const renameStatusEl = document.getElementById("rename-status");
@@ -855,6 +859,29 @@ async function addChipLabel() {
     chipsAddBtn.disabled = false;
   }
 }
+
+function setChipsRowExpanded(expanded) {
+  renameChipsRow.hidden = !expanded;
+  chipsToggleBtn.setAttribute("aria-expanded", String(expanded));
+}
+
+chipsToggleBtn.addEventListener("click", () => {
+  const expanded = renameChipsRow.hidden;
+  setChipsRowExpanded(expanded);
+  setChipsRowCollapsed(!expanded).catch((err) => {
+    console.error("Failed to persist chips row collapsed state:", err);
+  });
+});
+
+// Collapsed by default until proven otherwise, since it's new and takes up
+// space some people won't use — persisted, so the choice sticks.
+getChipsRowCollapsed()
+  .then((stored) => {
+    setChipsRowExpanded(!(stored === null ? true : stored));
+  })
+  .catch((err) => {
+    console.error("Failed to read chips row collapsed state:", err);
+  });
 
 editChipsBtn.addEventListener("click", () => {
   renderChipsList();

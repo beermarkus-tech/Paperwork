@@ -68,9 +68,9 @@ export async function setStoredFolderHandle(handle) {
   });
 }
 
-// Resolves null (not []) when nothing has ever been stored for this key, so
-// callers can tell "never set" apart from "explicitly set to empty".
-async function getStoredList(key) {
+// Resolves null when nothing has ever been stored for this key, so callers
+// can tell "never set" apart from an explicit falsy/empty value.
+async function getStoredValue(key) {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(META_STORE, "readonly");
@@ -80,7 +80,7 @@ async function getStoredList(key) {
   });
 }
 
-async function setStoredList(key, value) {
+async function setStoredValue(key, value) {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(META_STORE, "readwrite");
@@ -90,7 +90,11 @@ async function setStoredList(key, value) {
   });
 }
 
-export const getStoredDestinations = () => getStoredList(DESTINATIONS_KEY);
-export const setStoredDestinations = (names) => setStoredList(DESTINATIONS_KEY, names);
-export const getStoredChipLabels = () => getStoredList(CHIP_LABELS_KEY);
-export const setStoredChipLabels = (labels) => setStoredList(CHIP_LABELS_KEY, labels);
+export const getStoredDestinations = () => getStoredValue(DESTINATIONS_KEY);
+export const setStoredDestinations = (names) => setStoredValue(DESTINATIONS_KEY, names);
+export const getStoredChipLabels = () => getStoredValue(CHIP_LABELS_KEY);
+export const setStoredChipLabels = (labels) => setStoredValue(CHIP_LABELS_KEY, labels);
+
+const CHIPS_COLLAPSED_KEY = "chipsRowCollapsed";
+export const getChipsRowCollapsed = () => getStoredValue(CHIPS_COLLAPSED_KEY);
+export const setChipsRowCollapsed = (collapsed) => setStoredValue(CHIPS_COLLAPSED_KEY, collapsed);

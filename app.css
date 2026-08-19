@@ -363,6 +363,31 @@ button:disabled {
   color: #6fcf97;
 }
 
+#chips-toggle-btn {
+  width: auto;
+  align-self: flex-start;
+  padding: 0.15rem 0;
+  font-size: 0.75rem;
+  background: none;
+  color: rgba(255, 255, 255, 0.6);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+#chips-toggle-icon {
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+#chips-toggle-btn[aria-expanded="false"] #chips-toggle-icon {
+  transform: rotate(-90deg);
+}
+
+#rename-chips-row[hidden] {
+  display: none;
+}
+
 #rename-chips-row {
   display: flex;
   align-items: center;
