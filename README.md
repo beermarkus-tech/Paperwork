@@ -52,8 +52,8 @@ Full page-editing (split, join, delete, undo) is Stage 5, but rotation-saving wa
 
 A bar below the viewer stage, built and wired to a real on-disk rename together (same vertical-slice approach as rotation persistence):
 
-- Text field pre-filled with the current filename (extension hidden while editing, re-appended on save).
-- Calendar button opens the native date picker (via `showPicker()`, with a `.click()` fallback) and prefixes the picked date in `YYYY-MM-DD` format onto the filename.
+- Text field pre-filled with the current filename (extension hidden while editing, re-appended on save); tapping into it selects the whole value so typing or a chip tap replaces it outright.
+- Calendar button opens a small self-built Cancel/OK modal (`#date-modal`) around a native `<input type="date">`, defaulted to whatever date is already prefixed on the filename or today otherwise. A deliberate OK tap — not the modal simply opening — is what commits the date in `YYYY-MM-DD` format onto the filename, replacing an existing date prefix rather than stacking another one in front of it; Cancel or tapping the backdrop discards the pick. A custom modal was used instead of relying on the native date input's own `change` event, since that event only fires on an actual value change and never fires for "confirmed the shown default unmodified," which would otherwise make a plain OK tap silently do nothing.
 - Template chips append a word to the filename with one tap. The set is a fixed default for now (`Invoice`, `Receipt`, `Statement`, `Contract`, `Insurance`, `Medical`, `Tax`) — making these user-editable is deferred to the destination-folder settings screen, the next Stage 4 slice.
 - **Rename** commits immediately via `FileSystemFileHandle.move()` (`file-ops.js`), with a copy-then-delete fallback both for browsers without it and for platforms where it's present but throws at call time (seen on Android Chrome — likely a Storage Access Framework provider that doesn't support atomic rename). Blocks on an empty name, characters illegal in filenames (`\ / : * ? " < > |`), or a name collision with another file already in the folder.
 - On success, updates everything keyed by the old filename in place: the in-session rotation map, the cached thumbnail (re-keyed without a wasted re-render, since the file content didn't change), the thumbnail strip's caption, and the viewer's own page indicator.
@@ -76,6 +76,8 @@ Then open `http://localhost:8000/`.
 A GitHub Actions workflow (`.github/workflows/deploy.yml`) deploys this repo's contents to GitHub Pages on every push to `main`.
 
 **One-time manual step**: in the repo's Settings → Pages, set **Source** to **GitHub Actions**. After that, pushes to `main` deploy automatically.
+
+The setup screen's subtitle shows a version number (`APP_VERSION` in `app.js`), bumped by one alongside `sw.js`'s `CACHE_NAME` on every deploy, so it's always obvious which build is currently loaded.
 
 ## Testing on Android
 

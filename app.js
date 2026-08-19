@@ -9,6 +9,12 @@ import { loadDocument, renderPageToCanvas } from "./pdf-viewer.js";
 import { savePageRotation } from "./pdf-rotate.js";
 import { renameFileHandle } from "./file-ops.js";
 
+// Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
+// number on screen always identifies exactly which build is running.
+const APP_VERSION = 20;
+const appVersionEl = document.getElementById("app-version");
+if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
+
 const pickBtn = document.getElementById("pick-folder-btn");
 const changeFolderBtn = document.getElementById("change-folder-btn");
 const statusEl = document.getElementById("status");
@@ -27,10 +33,13 @@ const pageNavPrev = document.getElementById("page-nav-prev");
 const pageNavNext = document.getElementById("page-nav-next");
 const renameInput = document.getElementById("rename-input");
 const renameDateBtn = document.getElementById("rename-date-btn");
-const renameDateInput = document.getElementById("rename-date-input");
 const renameChipsEl = document.getElementById("rename-chips");
 const renameApplyBtn = document.getElementById("rename-apply-btn");
 const renameStatusEl = document.getElementById("rename-status");
+const dateModal = document.getElementById("date-modal");
+const dateModalInput = document.getElementById("date-modal-input");
+const dateModalCancelBtn = document.getElementById("date-modal-cancel-btn");
+const dateModalOkBtn = document.getElementById("date-modal-ok-btn");
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -278,6 +287,7 @@ async function flushPendingRotationSave() {
 
 async function openDocumentAt(index) {
   flushPendingRotationSave();
+  closeDateModal();
 
   if (viewerState.loadingTask) {
     const oldTask = viewerState.loadingTask;
@@ -316,6 +326,7 @@ function openViewer(entries, index) {
 
 async function closeViewer() {
   flushPendingRotationSave();
+  closeDateModal();
   viewerEl.hidden = true;
   if (viewerState.loadingTask) {
     const task = viewerState.loadingTask;
@@ -383,28 +394,33 @@ function applyDateToFilename(dateStr) {
   setRenameStatus(null);
 }
 
+// A small self-built modal (rather than relying on <input type="date">'s own
+// showPicker() + change event) so OK vs. Cancel is an explicit, reliable
+// signal we control — the native change event only fires on an actual value
+// change, not on "confirmed the shown default/current value unmodified",
+// which is exactly the case that needs to count as a real OK here.
 renameDateBtn.addEventListener("click", () => {
-  // Default to whatever date is already prefixed on the filename, or today
-  // otherwise, and apply it immediately — native <input type="date"> only
-  // fires "change" when the user actually picks a different value, not when
-  // they confirm the picker's own default/current selection unmodified, so
-  // waiting for that event alone would silently do nothing in that case.
   const current = renameInput.value.trim();
   const match = current.match(DATE_PREFIX_RE);
-  const defaultDate = match ? match[1] : getTodayDateString();
-  renameDateInput.value = defaultDate;
-  applyDateToFilename(defaultDate);
-
-  try {
-    renameDateInput.showPicker();
-  } catch (err) {
-    renameDateInput.click();
-  }
+  dateModalInput.value = match ? match[1] : getTodayDateString();
+  dateModal.hidden = false;
 });
 
-renameDateInput.addEventListener("change", () => {
-  if (!renameDateInput.value) return;
-  applyDateToFilename(renameDateInput.value);
+function closeDateModal() {
+  dateModal.hidden = true;
+}
+
+dateModalCancelBtn.addEventListener("click", closeDateModal);
+
+dateModal.addEventListener("click", (e) => {
+  if (e.target === dateModal) closeDateModal();
+});
+
+dateModalOkBtn.addEventListener("click", () => {
+  if (dateModalInput.value) {
+    applyDateToFilename(dateModalInput.value);
+  }
+  closeDateModal();
 });
 
 renameApplyBtn.addEventListener("click", () => {
