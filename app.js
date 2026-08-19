@@ -22,6 +22,8 @@ const viewerIndicator = document.getElementById("viewer-indicator");
 const viewerCloseBtn = document.getElementById("viewer-close-btn");
 const viewerRotateBtn = document.getElementById("viewer-rotate-btn");
 const viewerSaveStatus = document.getElementById("viewer-save-status");
+const pageNavPrev = document.getElementById("page-nav-prev");
+const pageNavNext = document.getElementById("page-nav-next");
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -211,6 +213,13 @@ async function renderCurrentPage() {
   viewerState.rotationByPage.set(viewerState.pageNumber, appliedRotation);
 
   viewerIndicator.textContent = `${entry.name} — page ${viewerState.pageNumber} of ${viewerState.pdf.numPages}`;
+  updatePageNavArrows();
+}
+
+function updatePageNavArrows() {
+  const pdf = viewerState.pdf;
+  pageNavPrev.hidden = !pdf || viewerState.pageNumber <= 1;
+  pageNavNext.hidden = !pdf || viewerState.pageNumber >= pdf.numPages;
 }
 
 // --- Rotation persistence: debounced save + flush-on-navigate ---
@@ -271,6 +280,8 @@ async function openDocumentAt(index) {
 
   viewerState.index = index;
   viewerState.pageNumber = 1;
+  pageNavPrev.hidden = true;
+  pageNavNext.hidden = true;
 
   const entry = viewerState.entries[index];
   viewerState.rotationByPage = getRotationMapFor(entry);
