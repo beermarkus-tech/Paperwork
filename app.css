@@ -298,16 +298,14 @@ button:disabled {
   color: #1a1a1a;
 }
 
-#rename-date-input {
-  flex: 0 0 auto;
+#rename-date-btn {
   width: auto;
-  max-width: 9.5rem;
-  padding: 0.6rem 0.5rem;
-  font-size: 0.9rem;
-  border: none;
-  border-radius: 0.4rem;
-  background: rgba(255, 255, 255, 0.92);
-  color: #1a1a1a;
+  flex: 0 0 auto;
+  padding: 0.6rem 0.8rem;
+  font-size: 1.2rem;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 #rename-chips {
@@ -370,6 +368,109 @@ button:disabled {
   font-size: 0.85rem;
 }
 
+/* Custom calendar popup: built ourselves instead of the native <input
+   type="date"> picker, since Android Chrome only reports a value when the
+   user taps a specific day in the grid — confirming the shown default with
+   no interaction silently does nothing there. Owning the whole grid, and
+   the OK/Cancel buttons, means the shown selection is always what OK
+   applies, with no such gap. */
+#date-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+}
+
+#date-modal[hidden] {
+  display: none;
+}
+
+#date-modal-sheet {
+  background: var(--paper);
+  color: #1a1a1a;
+  border-radius: 0.6rem;
+  padding: 1rem;
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+#date-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+#date-modal-header button {
+  width: auto;
+  padding: 0.4rem 0.75rem;
+  font-size: 1.3rem;
+  line-height: 1;
+  background: rgba(0, 0, 0, 0.08);
+  color: #1a1a1a;
+}
+
+#date-modal-title {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+#date-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.15rem;
+}
+
+.date-grid-weekday {
+  text-align: center;
+  font-size: 0.7rem;
+  color: rgba(0, 0, 0, 0.5);
+  padding: 0.25rem 0;
+}
+
+.date-grid-day {
+  width: auto;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  border-radius: 50%;
+  background: none;
+  color: #1a1a1a;
+}
+
+.date-grid-day.today {
+  box-shadow: inset 0 0 0 1px var(--navy);
+}
+
+.date-grid-day.selected {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+#date-modal-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+#date-modal-actions button {
+  width: auto;
+  flex: 1;
+}
+
+#date-modal-cancel-btn {
+  background: rgba(0, 0, 0, 0.08);
+  color: #1a1a1a;
+}
+
 @media (prefers-color-scheme: dark) {
   body {
     background: #14141a;
@@ -394,5 +495,37 @@ button:disabled {
 
   .thumb-size {
     color: #aaa;
+  }
+
+  #date-modal-sheet {
+    background: #24242c;
+    color: #eee;
+  }
+
+  #date-modal-header button {
+    background: rgba(255, 255, 255, 0.12);
+    color: #eee;
+  }
+
+  .date-grid-weekday {
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .date-grid-day {
+    color: #eee;
+  }
+
+  .date-grid-day.today {
+    box-shadow: inset 0 0 0 1px #9fb3d9;
+  }
+
+  .date-grid-day.selected {
+    background: #9fb3d9;
+    color: #14141a;
+  }
+
+  #date-modal-cancel-btn {
+    background: rgba(255, 255, 255, 0.12);
+    color: #eee;
   }
 }

@@ -11,7 +11,7 @@ import { renameFileHandle } from "./file-ops.js";
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 21;
+const APP_VERSION = 22;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
@@ -32,10 +32,17 @@ const viewerSaveStatus = document.getElementById("viewer-save-status");
 const pageNavPrev = document.getElementById("page-nav-prev");
 const pageNavNext = document.getElementById("page-nav-next");
 const renameInput = document.getElementById("rename-input");
-const renameDateInput = document.getElementById("rename-date-input");
+const renameDateBtn = document.getElementById("rename-date-btn");
 const renameChipsEl = document.getElementById("rename-chips");
 const renameApplyBtn = document.getElementById("rename-apply-btn");
 const renameStatusEl = document.getElementById("rename-status");
+const dateModal = document.getElementById("date-modal");
+const dateModalTitle = document.getElementById("date-modal-title");
+const dateModalGrid = document.getElementById("date-modal-grid");
+const datePrevBtn = document.getElementById("date-modal-prev-btn");
+const dateNextBtn = document.getElementById("date-modal-next-btn");
+const dateModalCancelBtn = document.getElementById("date-modal-cancel-btn");
+const dateModalOkBtn = document.getElementById("date-modal-ok-btn");
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -283,6 +290,7 @@ async function flushPendingRotationSave() {
 
 async function openDocumentAt(index) {
   flushPendingRotationSave();
+  closeDateModal();
 
   if (viewerState.loadingTask) {
     const oldTask = viewerState.loadingTask;
@@ -321,6 +329,7 @@ function openViewer(entries, index) {
 
 async function closeViewer() {
   flushPendingRotationSave();
+  closeDateModal();
   viewerEl.hidden = true;
   if (viewerState.loadingTask) {
     const task = viewerState.loadingTask;
@@ -360,14 +369,6 @@ function setRenameStatus(kind, message) {
 // replaces it instead of stacking another date in front of it.
 const DATE_PREFIX_RE = /^(\d{4}-\d{2}-\d{2})(?: - )?/;
 
-function getTodayDateString() {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
 function applyDateToFilename(dateStr) {
   const current = renameInput.value.trim();
   const match = current.match(DATE_PREFIX_RE);
@@ -378,8 +379,6 @@ function applyDateToFilename(dateStr) {
 
 function populateRenameBar(entry) {
   renameInput.value = entry.name.replace(PDF_EXTENSION_RE, "");
-  const match = renameInput.value.match(DATE_PREFIX_RE);
-  renameDateInput.value = match ? match[1] : getTodayDateString();
   setRenameStatus(null);
 }
 
@@ -390,14 +389,124 @@ renameInput.addEventListener("focus", () => {
   setTimeout(() => renameInput.select(), 0);
 });
 
-// A plain, always-visible date input: tapping it opens the platform's own
-// date picker directly, with no extra UI of ours layered on top, and its own
-// OK/Cancel decide whether anything happens — Cancel (or dismissing without
-// choosing) leaves the value, and therefore the filename, untouched. Only a
-// real value change fires "change", so this only fires on a genuine pick.
-renameDateInput.addEventListener("change", () => {
-  if (!renameDateInput.value) return;
-  applyDateToFilename(renameDateInput.value);
+// --- Custom date picker ---
+// Android Chrome's native <input type="date"> picker only reports a value
+// when the user taps a specific day in its grid — confirming the shown
+// default/current selection with no interaction fires no event at all, so a
+// plain OK tap would silently do nothing. Owning the whole calendar grid
+// ourselves, with our own OK/Cancel, avoids that gap entirely: whatever day
+// is highlighted when OK is tapped is what gets applied, full stop.
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+const WEEKDAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+let pickerYear = 0;
+let pickerMonth = 0; // 0-11
+let pickerSelected = null; // { year, month, day }
+
+function formatDateParts({ year, month, day }) {
+  const mm = String(month + 1).padStart(2, "0");
+  const dd = String(day).padStart(2, "0");
+  return `${year}-${mm}-${dd}`;
+}
+
+function renderDateGrid() {
+  dateModalTitle.textContent = `${MONTH_NAMES[pickerMonth]} ${pickerYear}`;
+  dateModalGrid.innerHTML = "";
+
+  for (const label of WEEKDAY_LABELS) {
+    const cell = document.createElement("div");
+    cell.className = "date-grid-weekday";
+    cell.textContent = label;
+    dateModalGrid.appendChild(cell);
+  }
+
+  const today = new Date();
+  const startOffset = new Date(pickerYear, pickerMonth, 1).getDay();
+  const daysInMonth = new Date(pickerYear, pickerMonth + 1, 0).getDate();
+
+  for (let i = 0; i < startOffset; i += 1) {
+    dateModalGrid.appendChild(document.createElement("div"));
+  }
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.className = "date-grid-day";
+    cell.textContent = String(day);
+
+    if (
+      today.getFullYear() === pickerYear &&
+      today.getMonth() === pickerMonth &&
+      today.getDate() === day
+    ) {
+      cell.classList.add("today");
+    }
+    if (
+      pickerSelected.year === pickerYear &&
+      pickerSelected.month === pickerMonth &&
+      pickerSelected.day === day
+    ) {
+      cell.classList.add("selected");
+    }
+
+    cell.addEventListener("click", () => {
+      pickerSelected = { year: pickerYear, month: pickerMonth, day };
+      renderDateGrid();
+    });
+    dateModalGrid.appendChild(cell);
+  }
+}
+
+function closeDateModal() {
+  dateModal.hidden = true;
+}
+
+renameDateBtn.addEventListener("click", () => {
+  const current = renameInput.value.trim();
+  const match = current.match(DATE_PREFIX_RE);
+  if (match) {
+    const [y, m, d] = match[1].split("-").map(Number);
+    pickerSelected = { year: y, month: m - 1, day: d };
+  } else {
+    const now = new Date();
+    pickerSelected = { year: now.getFullYear(), month: now.getMonth(), day: now.getDate() };
+  }
+  pickerYear = pickerSelected.year;
+  pickerMonth = pickerSelected.month;
+  renderDateGrid();
+  dateModal.hidden = false;
+});
+
+datePrevBtn.addEventListener("click", () => {
+  pickerMonth -= 1;
+  if (pickerMonth < 0) {
+    pickerMonth = 11;
+    pickerYear -= 1;
+  }
+  renderDateGrid();
+});
+
+dateNextBtn.addEventListener("click", () => {
+  pickerMonth += 1;
+  if (pickerMonth > 11) {
+    pickerMonth = 0;
+    pickerYear += 1;
+  }
+  renderDateGrid();
+});
+
+dateModalCancelBtn.addEventListener("click", closeDateModal);
+
+dateModal.addEventListener("click", (e) => {
+  if (e.target === dateModal) closeDateModal();
+});
+
+dateModalOkBtn.addEventListener("click", () => {
+  applyDateToFilename(formatDateParts(pickerSelected));
+  closeDateModal();
 });
 
 renameApplyBtn.addEventListener("click", () => {

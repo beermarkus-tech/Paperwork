@@ -53,7 +53,7 @@
           spellcheck="false"
           aria-label="Filename"
         />
-        <input type="date" id="rename-date-input" aria-label="Insert date" />
+        <button id="rename-date-btn" type="button" aria-label="Insert date">&#128197;</button>
       </div>
       <div id="rename-chips"></div>
       <div id="rename-action-row">
@@ -62,6 +62,21 @@
       </div>
     </div>
     <p id="viewer-hint">Swipe &larr;&rarr; for pages &middot; &uarr;&darr; for documents &middot; pinch to zoom</p>
+  </div>
+
+  <div id="date-modal" hidden>
+    <div id="date-modal-sheet">
+      <div id="date-modal-header">
+        <button id="date-modal-prev-btn" type="button" aria-label="Previous month">&#8249;</button>
+        <span id="date-modal-title"></span>
+        <button id="date-modal-next-btn" type="button" aria-label="Next month">&#8250;</button>
+      </div>
+      <div id="date-modal-grid"></div>
+      <div id="date-modal-actions">
+        <button id="date-modal-cancel-btn" type="button">Cancel</button>
+        <button id="date-modal-ok-btn" type="button">OK</button>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="./app.js"></script>
