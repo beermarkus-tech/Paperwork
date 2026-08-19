@@ -1,4 +1,4 @@
-const CACHE_NAME = "paperwork-shell-v30";
+const CACHE_NAME = "paperwork-shell-v31";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -9,6 +9,7 @@ const APP_SHELL = [
   "./pdf-thumbnails.js",
   "./pdf-viewer.js",
   "./pdf-rotate.js",
+  "./pdf-pages.js",
   "./file-ops.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",

@@ -1,6 +1,6 @@
 # Paperwork
 
-A Progressive Web App for local PDF triage. See the full spec in the project notes; this repo currently implements through **Stage 4** of the development roadmap.
+A Progressive Web App for local PDF triage. See the full spec in the project notes; this repo currently implements through the start of **Stage 5** of the development roadmap.
 
 ## Stage 1 — Foundational File System Access
 
@@ -66,7 +66,27 @@ A bar below the viewer stage, built and wired to a real on-disk rename together 
 - The sync runs both directions (`syncDestinationsWithFolder`): any subfolder already sitting inside the inbox — created by hand in a file manager, or left over from before this feature existed — is imported into the destinations list and shows up as a button automatically the moment that folder is opened, no manual re-adding needed.
 - Each destination appears as a button in a row below the rename bar (`#destination-bar`) whenever a document is open. Tapping one takes whatever filename is currently showing — untouched is fine, there's no requirement to have edited it or pressed the rename checkmark first — and moves the file straight into that subfolder under that name, in one motion, via a generalized `moveFileHandle()` (`file-ops.js`) that handles both same-directory renames and cross-directory moves through the same `FileSystemFileHandle.move()`-with-copy+delete-fallback logic as the rename bar. Blocked the same way rename is on an empty name, illegal characters, or a name collision — this time checked against the destination folder rather than the current one.
 - After a successful move, that file disappears from the current session's document stack and thumbnail strip immediately (no folder rescan needed), and the viewer auto-advances to what's now at the same position — letting a stack of scans be filed one after another as: adjust name → tap destination → repeat.
-- A brief "Filed to…" toast with an **Undo** button appears at the bottom for 5 seconds after each move. Undo moves the file straight back to its original name and folder; if the viewer is still open it closes back to the (freshly rescanned) thumbnail grid, since the viewer's in-session document list doesn't attempt to splice the restored file back into its old position live.
+- A brief "Filed to…" toast with an **Undo** button appears for 5 seconds after each move (see the shared undo mechanism under Stage 5 below). Undo moves the file straight back to its original name and folder; if the viewer is still open it closes back to the (freshly rescanned) thumbnail grid, since the viewer's in-session document list doesn't attempt to splice the restored file back into its old position live.
+
+## Stage 5 — Page Editing & Undo (in progress)
+
+### Page deletion
+
+A trash icon floats over the top-right of the page, inside `#viewer-stage` (so it sits over the PDF rather than taking toolbar space):
+
+- **Armed, two-tap delete**: the first tap turns the icon red and pulsing (`.armed`) instead of deleting immediately; a second tap on the *same page* within 3 seconds confirms and actually deletes it. Any navigation — a different page, a different document, closing the viewer — disarms it immediately, so a later unrelated tap can never land as an accidental confirm, and it also auto-disarms after 3 seconds of no second tap.
+- Deleting removes the page via [pdf-lib](https://pdf-lib.js.org/) (`pdf-pages.js`) and writes the file back, the same real-file-write-first approach used throughout. If it was the document's only remaining page, the whole file is deleted instead (`dirHandle.removeEntry`) and the viewer advances to the next document — a zero-page PDF isn't a meaningful thing to leave behind.
+- Rotation state (kept in memory, keyed by page number) is renumbered on a normal page delete: entries for pages after the deleted one shift down by one, and the deleted page's own entry is dropped. The document reloads in place afterward so the page count and current page both reflect the edit immediately, landing on whatever page is now at the same number (clamped to the new last page if the deleted page was also the last one).
+
+### Undo
+
+A single "last action, one step back" mechanism (`showUndoToast`/`pendingUndoRestore` in `app.js`) now backs both filing and page/document deletion, rather than each action having its own bespoke undo:
+
+- Each undoable action supplies its own restore closure when it shows the toast, so the toast itself doesn't need to know what kind of action it's undoing — filing hands it a closure that moves the file back; page deletion hands it one that rewrites the file's original bytes (captured as a full backup immediately before the destructive write) and reloads the page if it's still open; whole-document deletion hands it one that recreates the file and rescans the folder.
+- The toast is positioned inside `#viewer-stage` (bottom-center, overlaying the PDF) rather than fixed to the viewport — it used to sit at the very bottom of the screen, overlapping the destination buttons and blocking taps there for its full 5-second window; now it floats over content that isn't being interacted with during that window.
+- Performing a second undoable action while a toast is still showing replaces the pending undo — there's no history to step back through, just the one most recent action.
+
+Stage 6 (split and join) is next after this.
 
 ## Running locally
 
@@ -100,6 +120,7 @@ The setup screen's subtitle shows a version number (`APP_VERSION` in `app.js`), 
 10. On the setup screen, tap "Destinations…" and add a couple of subfolder names; confirm they actually appear as real folders in your inbox via a file manager. Open a document, confirm the same names now show as buttons below the rename bar, and tap one — the document should disappear from the grid, the viewer should move to the next one, and the file should now be sitting in that subfolder under the name that was showing. Tap **Undo** on the toast that appears and confirm it lands back in the inbox with its original name. Also try filing to a destination that already has a same-named file in it — it should refuse rather than overwrite.
 11. In the rename bar, tap the pencil button next to the template chips and add or remove a label or two; confirm the chip row updates immediately and the change survives a full app reload. Pick a date via the calendar button on a filename with no other text — confirm it inserts as just the date, with no trailing dash — then pick a date on a filename that already has text, and confirm the two are joined with a plain space (`2026-08-10 Tax Statement`), not a dash.
 12. Using a file manager (outside Paperwork), create a subfolder inside your inbox that Paperwork has never seen — then open that folder in Paperwork. Confirm the new subfolder shows up automatically both in the "Destinations…" screen's list and as a button below the rename bar, with no manual adding required.
+13. Open a multi-page document and tap the trash icon once — it should turn red/pulsing without deleting anything. Wait 3+ seconds without tapping again and confirm it reverts on its own; then tap once, swipe to a different page, and confirm it's back to the plain icon (not still armed). Finally tap once and tap again to confirm — the page should actually be gone, the page count should drop by one, and an "Undo" toast should appear over the PDF, above the rename bar. Tap **Undo** and confirm the page comes back exactly as it was (including its rotation, if you'd rotated it). Then open a single-page document, delete its only page, and confirm the whole file disappears from the grid rather than leaving an empty document behind — Undo should bring the file back too.
 
 If you've already installed Paperwork to your home screen from an earlier stage and an update doesn't seem to take effect, the installed app (a WebAPK) can get stuck on stale cached files. Uninstalling and reinstalling via "Add to Home screen" is the most reliable fix — more reliable than in-place "Clear cache"/"Clear storage" from Android's App Info screen, which has been inconsistent in testing.
 

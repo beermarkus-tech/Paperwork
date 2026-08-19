@@ -11,11 +11,12 @@ import {
 import { renderFirstPageThumbnail } from "./pdf-thumbnails.js";
 import { loadDocument, renderPageToCanvas } from "./pdf-viewer.js";
 import { savePageRotation } from "./pdf-rotate.js";
+import { deletePageFromFile, restoreFileBytes } from "./pdf-pages.js";
 import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js";
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 30;
+const APP_VERSION = 31;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
@@ -48,6 +49,7 @@ const viewerRotateBtn = document.getElementById("viewer-rotate-btn");
 const viewerSaveStatus = document.getElementById("viewer-save-status");
 const pageNavPrev = document.getElementById("page-nav-prev");
 const pageNavNext = document.getElementById("page-nav-next");
+const deletePageBtn = document.getElementById("delete-page-btn");
 const renameInput = document.getElementById("rename-input");
 const renameDateBtn = document.getElementById("rename-date-btn");
 const renameChipsEl = document.getElementById("rename-chips");
@@ -315,6 +317,7 @@ async function flushPendingRotationSave() {
 async function openDocumentAt(index) {
   flushPendingRotationSave();
   closeDateModal();
+  disarmDelete();
 
   if (viewerState.loadingTask) {
     const oldTask = viewerState.loadingTask;
@@ -354,6 +357,7 @@ function openViewer(entries, index) {
 async function closeViewer() {
   flushPendingRotationSave();
   closeDateModal();
+  disarmDelete();
   viewerEl.hidden = true;
   if (viewerState.loadingTask) {
     const task = viewerState.loadingTask;
@@ -946,7 +950,13 @@ async function fileCurrentDocumentTo(destinationName) {
   try {
     const newHandle = await moveFileHandle(sourceDirHandle, entry.handle, oldName, destDirHandle, newName);
     removeEntryFromViewer(entry, oldName);
-    showUndoToast({ destDirHandle, destName: newName, destinationName, sourceDirHandle, originalName: oldName, newHandle });
+    showUndoToast(`Filed to "${destinationName}"`, async () => {
+      await moveFileHandle(destDirHandle, newHandle, newName, sourceDirHandle, oldName);
+      if (!viewerEl.hidden) await closeViewer();
+      if (sourceDirHandle === currentDirHandle) {
+        await loadFolder(currentDirHandle);
+      }
+    });
     advanceAfterFiling(index);
   } finally {
     setDestinationBarDisabled(false);
@@ -954,8 +964,12 @@ async function fileCurrentDocumentTo(destinationName) {
   }
 }
 
+// A single "last action" undo slot, good for one step back — filing and
+// page/document deletion both feed it. Each action supplies its own restore
+// closure rather than the toast knowing about every action type, so adding
+// another undoable action later doesn't mean growing a dispatch switch here.
 let undoToastTimer = null;
-let pendingUndo = null;
+let pendingUndoRestore = null;
 
 function hideUndoToast() {
   undoToast.hidden = true;
@@ -963,34 +977,26 @@ function hideUndoToast() {
     clearTimeout(undoToastTimer);
     undoToastTimer = null;
   }
-  pendingUndo = null;
+  pendingUndoRestore = null;
 }
 
-function showUndoToast({ destDirHandle, destName, destinationName, sourceDirHandle, originalName, newHandle }) {
-  pendingUndo = { destDirHandle, destName, sourceDirHandle, originalName, newHandle };
-  undoToastText.textContent = `Filed to "${destinationName}"`;
+function showUndoToast(message, restore) {
+  pendingUndoRestore = restore;
+  undoToastText.textContent = message;
   undoToast.hidden = false;
   if (undoToastTimer) clearTimeout(undoToastTimer);
   undoToastTimer = setTimeout(hideUndoToast, 5000);
 }
 
 undoToastBtn.addEventListener("click", async () => {
-  if (!pendingUndo) return;
-  const { destDirHandle, destName, sourceDirHandle, originalName, newHandle } = pendingUndo;
+  if (!pendingUndoRestore) return;
+  const restore = pendingUndoRestore;
   hideUndoToast();
   try {
-    await moveFileHandle(destDirHandle, newHandle, destName, sourceDirHandle, originalName);
+    await restore();
   } catch (err) {
-    console.error("Failed to undo filing:", err);
+    console.error("Failed to undo:", err);
     statusEl.textContent = `⚠️ Couldn't undo: ${err.message || err}`;
-    return;
-  }
-  if (!viewerEl.hidden) await closeViewer();
-  if (sourceDirHandle === currentDirHandle) {
-    loadFolder(currentDirHandle).catch((err) => {
-      statusEl.textContent = `⚠️ ${err.message || err}`;
-      console.error(err);
-    });
   }
 });
 
@@ -1043,6 +1049,7 @@ function goToPage(delta) {
   const next = viewerState.pageNumber + delta;
   if (next < 1 || next > viewerState.pdf.numPages) return;
   flushPendingRotationSave();
+  disarmDelete();
   animateNavigation("x", delta, async () => {
     viewerState.pageNumber = next;
     resetZoomPan();
@@ -1074,6 +1081,119 @@ viewerRotateBtn.addEventListener("click", () => {
   scheduleRotationSave(entry, viewerState.pageNumber, next);
 });
 
+// --- Page deletion: tap arms the trash icon, a second tap on the same
+// page confirms. Disarms on any navigation so a later, unrelated tap can
+// never land as a confirm. ---
+
+let armedDeletePage = null; // { entry, pageNumber } while armed
+let armedDeleteTimer = null;
+const DELETE_ARM_TIMEOUT_MS = 3000;
+
+function disarmDelete() {
+  armedDeletePage = null;
+  deletePageBtn.classList.remove("armed");
+  if (armedDeleteTimer) {
+    clearTimeout(armedDeleteTimer);
+    armedDeleteTimer = null;
+  }
+}
+
+function armDelete(entry, pageNumber) {
+  armedDeletePage = { entry, pageNumber };
+  deletePageBtn.classList.add("armed");
+  if (armedDeleteTimer) clearTimeout(armedDeleteTimer);
+  armedDeleteTimer = setTimeout(disarmDelete, DELETE_ARM_TIMEOUT_MS);
+}
+
+deletePageBtn.addEventListener("click", () => {
+  if (!viewerState.pdf) return;
+  const entry = viewerState.entries[viewerState.index];
+  const pageNumber = viewerState.pageNumber;
+
+  if (armedDeletePage && armedDeletePage.entry === entry && armedDeletePage.pageNumber === pageNumber) {
+    disarmDelete();
+    performPageDelete(entry, pageNumber).catch((err) => {
+      console.error("Failed to delete page:", err);
+      statusEl.textContent = `⚠️ Couldn't delete page: ${err.message || err}`;
+    });
+  } else {
+    armDelete(entry, pageNumber);
+  }
+});
+
+async function performPageDelete(entry, pageNumber) {
+  const index = viewerState.index;
+  const oldName = entry.name;
+  const wasOnlyPage = viewerState.pdf.numPages === 1;
+
+  await flushPendingRotationSave();
+  const backupBytes = await entry.file.arrayBuffer();
+
+  if (wasOnlyPage) {
+    await currentDirHandle.removeEntry(oldName);
+    removeEntryFromViewer(entry, oldName);
+    showUndoToast(`Deleted "${oldName}"`, async () => {
+      const newHandle = await currentDirHandle.getFileHandle(oldName, { create: true });
+      await restoreFileBytes(newHandle, backupBytes);
+      if (!viewerEl.hidden) await closeViewer();
+      await loadFolder(currentDirHandle);
+    });
+    advanceAfterFiling(index);
+    return;
+  }
+
+  const newPageCount = await deletePageFromFile(entry.handle, entry.file, pageNumber);
+  entry.file = await entry.handle.getFile();
+  entry.size = entry.file.size;
+  entry.lastModified = entry.file.lastModified;
+
+  // Rotation state is keyed by page number: pages after the deleted one
+  // shift down by one, and the deleted page's own entry is dropped. The
+  // rest of the document (including everyone else's rotation) lives in the
+  // bytes themselves, so nothing else needs to change here.
+  const shifted = new Map();
+  for (const [pn, rot] of getRotationMapFor(entry)) {
+    if (pn < pageNumber) shifted.set(pn, rot);
+    else if (pn > pageNumber) shifted.set(pn - 1, rot);
+  }
+  rotationsByDocument.set(entry.name, shifted);
+  viewerState.rotationByPage = shifted;
+
+  const oldTask = viewerState.loadingTask;
+  viewerState.loadingTask = null;
+  viewerState.pdf = null;
+  await oldTask.destroy().catch(() => {});
+
+  const { pdf, loadingTask } = await loadDocument(entry.file);
+  viewerState.pdf = pdf;
+  viewerState.loadingTask = loadingTask;
+  viewerState.pageNumber = Math.min(pageNumber, newPageCount);
+  resetZoomPan();
+  await renderCurrentPage();
+
+  refreshThumbnailFor(entry).catch((err) => {
+    console.error(`Failed to refresh thumbnail for ${entry.name}:`, err);
+  });
+
+  showUndoToast(`Deleted page ${pageNumber}`, async () => {
+    await restoreFileBytes(entry.handle, backupBytes);
+    entry.file = await entry.handle.getFile();
+    entry.size = entry.file.size;
+    entry.lastModified = entry.file.lastModified;
+    // The restored bytes carry their own original rotations; simplest to
+    // drop the in-session map for this document and let it be re-read from
+    // the file (same as opening a document for the first time) rather than
+    // trying to un-shift it back into place by hand.
+    rotationsByDocument.delete(entry.name);
+    refreshThumbnailFor(entry).catch((err) => {
+      console.error(`Failed to refresh thumbnail for ${entry.name}:`, err);
+    });
+    if (!viewerEl.hidden && viewerState.entries[viewerState.index] === entry) {
+      await openDocumentAt(viewerState.index);
+    }
+  });
+}
+
 // Touch gestures: pinch to zoom, single-finger pan when zoomed,
 // horizontal swipe for pages, vertical swipe for documents.
 const pointers = new Map();
@@ -1087,6 +1207,11 @@ function pointerDistance(a, b) {
 }
 
 viewerStageEl.addEventListener("pointerdown", (e) => {
+  // Ignore taps that start on a real control (the delete-page button, the
+  // undo toast's button) — both now live inside the stage so their taps
+  // overlay the PDF, but they must never be swallowed into pinch/pan/swipe
+  // tracking or have their click suppressed by pointer capture retargeting.
+  if (e.target.closest("button")) return;
   viewerStageEl.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 

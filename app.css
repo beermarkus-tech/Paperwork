@@ -273,6 +273,31 @@ button:disabled {
   right: 0.5rem;
 }
 
+#delete-page-btn {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 10;
+  width: auto;
+  padding: 0.55rem;
+  line-height: 1;
+  font-size: 1.2rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+}
+
+#delete-page-btn.armed {
+  background: #b23a3a;
+  animation: delete-armed-pulse 1s ease-in-out infinite;
+}
+
+@keyframes delete-armed-pulse {
+  50% {
+    background: #d94f4f;
+  }
+}
+
 #rename-bar {
   flex: 0 0 auto;
   background: rgba(0, 0, 0, 0.6);
@@ -534,13 +559,15 @@ button:disabled {
   color: #b23a3a;
 }
 
-/* Undo toast */
+/* Undo toast — positioned within the stage (over the PDF) rather than
+   fixed to the viewport, so it never sits over the rename bar or
+   destination buttons and block taps there while it's showing. */
 #undo-toast {
-  position: fixed;
+  position: absolute;
   left: 50%;
-  bottom: max(1.25rem, env(safe-area-inset-bottom));
+  bottom: 0.75rem;
   transform: translateX(-50%);
-  z-index: 300;
+  z-index: 20;
   background: #1a1a1a;
   color: #fff;
   border-radius: 0.5rem;

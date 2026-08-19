@@ -13,7 +13,7 @@
 <body>
   <header>
     <h1>Paperwork</h1>
-    <p class="subtitle">Stage 4 &mdash; folder persistence, rename &amp; filing <span id="app-version"></span></p>
+    <p class="subtitle">Stage 5 &mdash; page deletion &amp; undo <span id="app-version"></span></p>
   </header>
 
   <main>
@@ -42,6 +42,11 @@
       <span id="page-nav-prev" class="page-nav-arrow" aria-hidden="true" hidden>&#8249;</span>
       <canvas id="viewer-canvas"></canvas>
       <span id="page-nav-next" class="page-nav-arrow page-nav-next" aria-hidden="true" hidden>&#8250;</span>
+      <button id="delete-page-btn" type="button" aria-label="Delete page">&#128465;&#65039;</button>
+      <div id="undo-toast" hidden>
+        <span id="undo-toast-text"></span>
+        <button id="undo-toast-btn" type="button">Undo</button>
+      </div>
     </div>
     <div id="rename-bar">
       <div id="rename-input-row">
@@ -64,11 +69,6 @@
       <span id="rename-status" role="status"></span>
     </div>
     <div id="destination-bar"></div>
-  </div>
-
-  <div id="undo-toast" hidden>
-    <span id="undo-toast-text"></span>
-    <button id="undo-toast-btn" type="button">Undo</button>
   </div>
 
   <div id="destinations-screen" class="sheet-overlay" hidden>
