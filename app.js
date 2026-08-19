@@ -393,6 +393,16 @@ viewerStageEl.addEventListener("pointercancel", endPointer);
 
 let pendingReconnectHandle = null;
 
+function updateFolderButtons() {
+  if (pendingReconnectHandle) {
+    pickBtn.textContent = `Reconnect to "${pendingReconnectHandle.name}"…`;
+    changeFolderBtn.hidden = false;
+  } else {
+    pickBtn.textContent = "Choose inbox folder…";
+    changeFolderBtn.hidden = true;
+  }
+}
+
 async function loadFolder(dirHandle) {
   statusEl.textContent = `Scanning "${dirHandle.name}"…`;
 
@@ -416,8 +426,7 @@ async function loadFolder(dirHandle) {
   }
 
   pendingReconnectHandle = null;
-  pickBtn.textContent = "Choose inbox folder…";
-  changeFolderBtn.hidden = false;
+  updateFolderButtons();
 }
 
 async function pickNewFolder() {
@@ -445,7 +454,7 @@ async function reconnectFolder(handle) {
     if (permission !== "granted") {
       statusEl.textContent = `Access to "${handle.name}" wasn't granted. Choose a folder to continue.`;
       pendingReconnectHandle = null;
-      pickBtn.textContent = "Choose inbox folder…";
+      updateFolderButtons();
       return;
     }
     await loadFolder(handle);
@@ -465,8 +474,6 @@ async function attemptAutoReconnect() {
   }
   if (!stored || !("queryPermission" in stored)) return;
 
-  changeFolderBtn.hidden = false;
-
   let permission;
   try {
     permission = await stored.queryPermission({ mode: "readwrite" });
@@ -483,7 +490,7 @@ async function attemptAutoReconnect() {
     });
   } else {
     pendingReconnectHandle = stored;
-    pickBtn.textContent = `Reconnect to "${stored.name}"…`;
+    updateFolderButtons();
     statusEl.textContent = `Tap to reconfirm access to "${stored.name}".`;
   }
 }
