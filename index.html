@@ -57,7 +57,10 @@
         />
         <button id="rename-apply-btn" type="button" aria-label="Rename">&#10003;</button>
       </div>
-      <div id="rename-chips"></div>
+      <div id="rename-chips-row">
+        <div id="rename-chips"></div>
+        <button id="edit-chips-btn" type="button" aria-label="Edit chip labels">&#9999;&#65039;</button>
+      </div>
       <span id="rename-status" role="status"></span>
     </div>
     <div id="destination-bar"></div>
@@ -69,17 +72,31 @@
     <button id="undo-toast-btn" type="button">Undo</button>
   </div>
 
-  <div id="destinations-screen" hidden>
-    <div id="destinations-sheet">
+  <div id="destinations-screen" class="sheet-overlay" hidden>
+    <div id="destinations-sheet" class="sheet-card">
       <h2>Destination folders</h2>
-      <p id="destinations-hint">Subfolders of your inbox you can file pages into with one tap. Created on disk as soon as you add them here.</p>
-      <div id="destinations-list"></div>
-      <div id="destinations-add-row">
-        <input type="text" id="destinations-add-input" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false" aria-label="New destination name" placeholder="New folder name" />
-        <button id="destinations-add-btn" type="button">Add</button>
+      <p class="sheet-hint">Subfolders of your inbox you can file pages into with one tap. Created on disk as soon as you add them here.</p>
+      <div id="destinations-list" class="settings-list"></div>
+      <div class="settings-add-row">
+        <input type="text" id="destinations-add-input" class="settings-add-input" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false" aria-label="New destination name" placeholder="New folder name" />
+        <button id="destinations-add-btn" type="button" class="settings-add-btn">Add</button>
       </div>
-      <span id="destinations-status" role="status"></span>
+      <span id="destinations-status" class="settings-status" role="status"></span>
       <button id="destinations-done-btn" type="button">Done</button>
+    </div>
+  </div>
+
+  <div id="chips-screen" class="sheet-overlay" hidden>
+    <div id="chips-sheet" class="sheet-card">
+      <h2>Chip labels</h2>
+      <p class="sheet-hint">Quick words you can tap into the filename, below the date field.</p>
+      <div id="chips-list" class="settings-list"></div>
+      <div class="settings-add-row">
+        <input type="text" id="chips-add-input" class="settings-add-input" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false" aria-label="New chip label" placeholder="New label" />
+        <button id="chips-add-btn" type="button" class="settings-add-btn">Add</button>
+      </div>
+      <span id="chips-status" class="settings-status" role="status"></span>
+      <button id="chips-done-btn" type="button">Done</button>
     </div>
   </div>
 

@@ -337,7 +337,15 @@ button:disabled {
   color: #6fcf97;
 }
 
+#rename-chips-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 #rename-chips {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
@@ -354,6 +362,16 @@ button:disabled {
 
 .rename-chip:active {
   background: rgba(255, 255, 255, 0.28);
+}
+
+#edit-chips-btn {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 0.4rem 0.6rem;
+  font-size: 1rem;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 #rename-status {
@@ -409,8 +427,11 @@ button:disabled {
   background: rgba(255, 255, 255, 0.28);
 }
 
-/* Destinations settings screen */
-#destinations-screen {
+/* Shared list-editor sheet pattern: destination folders and rename chips
+   are two instances of the same "manage a list of short text labels"
+   screen, so they share one set of classes rather than duplicating the
+   same rules under different IDs. */
+.sheet-overlay {
   position: fixed;
   inset: 0;
   z-index: 200;
@@ -421,11 +442,11 @@ button:disabled {
   padding: 1.25rem;
 }
 
-#destinations-screen[hidden] {
+.sheet-overlay[hidden] {
   display: none;
 }
 
-#destinations-sheet {
+.sheet-card {
   background: var(--paper);
   color: #1a1a1a;
   border-radius: 0.6rem;
@@ -439,25 +460,25 @@ button:disabled {
   gap: 0.75rem;
 }
 
-#destinations-sheet h2 {
+.sheet-card h2 {
   margin: 0;
   font-size: 1.1rem;
 }
 
-#destinations-hint {
+.sheet-hint {
   margin: 0;
   font-size: 0.85rem;
   color: rgba(0, 0, 0, 0.6);
   line-height: 1.4;
 }
 
-#destinations-list {
+.settings-list {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
 }
 
-.destination-row {
+.settings-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -466,7 +487,7 @@ button:disabled {
   padding: 0.5rem 0.6rem;
 }
 
-.destination-row-name {
+.settings-row-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -475,7 +496,7 @@ button:disabled {
   font-size: 0.95rem;
 }
 
-.destination-row-remove {
+.settings-row-remove {
   width: auto;
   flex: 0 0 auto;
   padding: 0.3rem 0.6rem;
@@ -484,18 +505,18 @@ button:disabled {
   color: #7a1f1f;
 }
 
-#destinations-empty {
+.settings-empty {
   font-size: 0.85rem;
   color: rgba(0, 0, 0, 0.5);
   font-style: italic;
 }
 
-#destinations-add-row {
+.settings-add-row {
   display: flex;
   gap: 0.5rem;
 }
 
-#destinations-add-input {
+.settings-add-input {
   flex: 1;
   min-width: 0;
   font-size: 0.95rem;
@@ -506,19 +527,19 @@ button:disabled {
   color: #1a1a1a;
 }
 
-#destinations-add-btn {
+.settings-add-btn {
   width: auto;
   flex: 0 0 auto;
   padding: 0.55rem 1rem;
   font-size: 0.9rem;
 }
 
-#destinations-status {
+.settings-status {
   font-size: 0.8rem;
   min-height: 1.1em;
 }
 
-#destinations-status.error {
+.settings-status.error {
   color: #b23a3a;
 }
 

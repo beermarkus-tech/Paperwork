@@ -5,6 +5,8 @@ import {
   setStoredFolderHandle,
   getStoredDestinations,
   setStoredDestinations,
+  getStoredChipLabels,
+  setStoredChipLabels,
 } from "./idb.js";
 import { renderFirstPageThumbnail } from "./pdf-thumbnails.js";
 import { loadDocument, renderPageToCanvas } from "./pdf-viewer.js";
@@ -13,7 +15,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 26;
+const APP_VERSION = 27;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
@@ -49,8 +51,16 @@ const pageNavNext = document.getElementById("page-nav-next");
 const renameInput = document.getElementById("rename-input");
 const renameDateBtn = document.getElementById("rename-date-btn");
 const renameChipsEl = document.getElementById("rename-chips");
+const editChipsBtn = document.getElementById("edit-chips-btn");
 const renameApplyBtn = document.getElementById("rename-apply-btn");
 const renameStatusEl = document.getElementById("rename-status");
+
+const chipsScreen = document.getElementById("chips-screen");
+const chipsList = document.getElementById("chips-list");
+const chipsAddInput = document.getElementById("chips-add-input");
+const chipsAddBtn = document.getElementById("chips-add-btn");
+const chipsStatusEl = document.getElementById("chips-status");
+const chipsDoneBtn = document.getElementById("chips-done-btn");
 const dateModal = document.getElementById("date-modal");
 const dateModalTitle = document.getElementById("date-modal-title");
 const dateModalGrid = document.getElementById("date-modal-grid");
@@ -354,25 +364,30 @@ async function closeViewer() {
 }
 
 // --- Rename bar ---
-// Template chips are a fixed default set for now; making them user-editable
-// is deferred to the destination-folder settings screen (next Stage 4 slice).
-const RENAME_CHIPS = ["Invoice", "Receipt", "Statement", "Contract", "Insurance", "Medical", "Tax"];
+const DEFAULT_CHIP_LABELS = ["Invoice", "Receipt", "Statement", "Contract", "Insurance", "Medical", "Tax"];
 const PDF_EXTENSION_RE = /\.pdf$/i;
 const ILLEGAL_FILENAME_CHARS_RE = /[\\/:*?"<>|]/;
 
-for (const chipText of RENAME_CHIPS) {
-  const chip = document.createElement("button");
-  chip.type = "button";
-  chip.className = "rename-chip";
-  chip.textContent = chipText;
-  chip.addEventListener("click", () => {
-    const current = renameInput.value.trim();
-    renameInput.value = current ? `${current} ${chipText}` : chipText;
-    renameInput.focus();
-    setRenameStatus(null);
-  });
-  renameChipsEl.appendChild(chip);
+let chipLabels = DEFAULT_CHIP_LABELS;
+
+function renderRenameChips() {
+  renameChipsEl.innerHTML = "";
+  for (const chipText of chipLabels) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "rename-chip";
+    chip.textContent = chipText;
+    chip.addEventListener("click", () => {
+      const current = renameInput.value.trim();
+      renameInput.value = current ? `${current} ${chipText}` : chipText;
+      renameInput.focus();
+      setRenameStatus(null);
+    });
+    renameChipsEl.appendChild(chip);
+  }
 }
+
+renderRenameChips();
 
 function setRenameStatus(kind, message) {
   renameStatusEl.textContent = message || "";
@@ -388,13 +403,18 @@ function setRenameButtonState(state) {
 }
 
 // Matches a date prefix this same UI would have inserted, so a later pick
-// replaces it instead of stacking another date in front of it.
-const DATE_PREFIX_RE = /^(\d{4}-\d{2}-\d{2})(?: - )?/;
+// replaces it instead of stacking another date in front of it. The
+// separator itself is matched loosely (any whitespace, an optional single
+// dash, any whitespace) rather than requiring the exact " - " this UI
+// writes, so a stray leftover dash from an older version — or from manually
+// edited text — gets absorbed here instead of leaving a dangling "- " with
+// nothing after it once the rest of the name is empty.
+const DATE_PREFIX_RE = /^(\d{4}-\d{2}-\d{2})\s*-?\s*/;
 
 function applyDateToFilename(dateStr) {
   const current = renameInput.value.trim();
   const match = current.match(DATE_PREFIX_RE);
-  const rest = match ? current.slice(match[0].length) : current;
+  const rest = (match ? current.slice(match[0].length) : current).trim();
   renameInput.value = rest ? `${dateStr} - ${rest}` : dateStr;
   setRenameStatus(null);
 }
@@ -601,38 +621,51 @@ async function commitRename() {
   }
 }
 
-// --- Destination folders & tap-to-file ---
-
-let destinations = [];
-
-function renderDestinationsList() {
-  destinationsList.innerHTML = "";
-  if (destinations.length === 0) {
+// --- Shared "manage a list of short text labels" sheet pattern ---
+// Destination folders and rename chips are two instances of the same UI
+// (a list with per-row remove buttons, plus an add row); this renders
+// either one into its container.
+function renderSettingsList(containerEl, items, emptyText, onRemove) {
+  containerEl.innerHTML = "";
+  if (items.length === 0) {
     const empty = document.createElement("p");
-    empty.id = "destinations-empty";
-    empty.textContent = "No destinations yet — add one below.";
-    destinationsList.appendChild(empty);
+    empty.className = "settings-empty";
+    empty.textContent = emptyText;
+    containerEl.appendChild(empty);
     return;
   }
-  for (const name of destinations) {
+  for (const name of items) {
     const row = document.createElement("div");
-    row.className = "destination-row";
+    row.className = "settings-row";
 
     const nameEl = document.createElement("span");
-    nameEl.className = "destination-row-name";
+    nameEl.className = "settings-row-name";
     nameEl.textContent = name;
     row.appendChild(nameEl);
 
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
-    removeBtn.className = "destination-row-remove";
+    removeBtn.className = "settings-row-remove";
     removeBtn.setAttribute("aria-label", `Remove ${name}`);
     removeBtn.textContent = "✕";
-    removeBtn.addEventListener("click", () => removeDestination(name));
+    removeBtn.addEventListener("click", () => onRemove(name));
     row.appendChild(removeBtn);
 
-    destinationsList.appendChild(row);
+    containerEl.appendChild(row);
   }
+}
+
+function setStatusText(el, kind, message) {
+  el.textContent = message || "";
+  el.className = kind || "";
+}
+
+// --- Destination folders & tap-to-file ---
+
+let destinations = [];
+
+function renderDestinationsList() {
+  renderSettingsList(destinationsList, destinations, "No destinations yet — add one below.", removeDestination);
 }
 
 function renderDestinationBar() {
@@ -674,8 +707,7 @@ async function removeDestination(name) {
 }
 
 function setDestinationsStatus(kind, message) {
-  destinationsStatusEl.textContent = message || "";
-  destinationsStatusEl.className = kind || "";
+  setStatusText(destinationsStatusEl, kind, message);
 }
 
 async function addDestination() {
@@ -730,6 +762,73 @@ destinationsAddInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
     addDestination();
+  }
+});
+
+// --- Rename chip labels (editable) ---
+
+function renderChipsList() {
+  renderSettingsList(chipsList, chipLabels, "No chip labels yet — add one below.", removeChipLabel);
+}
+
+function setChipsStatus(kind, message) {
+  setStatusText(chipsStatusEl, kind, message);
+}
+
+async function removeChipLabel(label) {
+  chipLabels = chipLabels.filter((l) => l !== label);
+  renderChipsList();
+  renderRenameChips();
+  try {
+    await setStoredChipLabels(chipLabels);
+  } catch (err) {
+    console.error("Failed to persist chip labels:", err);
+  }
+}
+
+async function addChipLabel() {
+  const label = chipsAddInput.value.trim();
+  setChipsStatus(null);
+
+  if (!label) return;
+  if (chipLabels.includes(label)) {
+    setChipsStatus("error", `"${label}" is already in the list.`);
+    return;
+  }
+
+  chipsAddBtn.disabled = true;
+  try {
+    chipLabels = [...chipLabels, label];
+    await setStoredChipLabels(chipLabels);
+    renderChipsList();
+    renderRenameChips();
+    chipsAddInput.value = "";
+  } catch (err) {
+    console.error("Failed to persist chip labels:", err);
+    setChipsStatus("error", `⚠️ ${err.message || err}`);
+  } finally {
+    chipsAddBtn.disabled = false;
+  }
+}
+
+editChipsBtn.addEventListener("click", () => {
+  renderChipsList();
+  setChipsStatus(null);
+  chipsScreen.hidden = false;
+});
+
+chipsDoneBtn.addEventListener("click", () => {
+  chipsScreen.hidden = true;
+});
+
+chipsAddBtn.addEventListener("click", () => {
+  addChipLabel();
+});
+
+chipsAddInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    addChipLabel();
   }
 });
 
@@ -1141,6 +1240,19 @@ getStoredDestinations()
   })
   .catch((err) => {
     console.error("Failed to read stored destinations:", err);
+  });
+
+getStoredChipLabels()
+  .then((stored) => {
+    // null means never stored (first run) — keep the built-in defaults.
+    // An explicit [] means the user cleared every chip on purpose; respect it.
+    if (stored !== null) {
+      chipLabels = stored;
+      renderRenameChips();
+    }
+  })
+  .catch((err) => {
+    console.error("Failed to read stored chip labels:", err);
   });
 
 if (!("showDirectoryPicker" in window)) {

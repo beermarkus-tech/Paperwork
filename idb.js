@@ -4,6 +4,7 @@ const THUMBNAIL_STORE = "thumbnails";
 const META_STORE = "meta";
 const FOLDER_HANDLE_KEY = "inboxFolderHandle";
 const DESTINATIONS_KEY = "destinations";
+const CHIP_LABELS_KEY = "chipLabels";
 
 let dbPromise = null;
 
@@ -67,22 +68,29 @@ export async function setStoredFolderHandle(handle) {
   });
 }
 
-export async function getStoredDestinations() {
+// Resolves null (not []) when nothing has ever been stored for this key, so
+// callers can tell "never set" apart from "explicitly set to empty".
+async function getStoredList(key) {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(META_STORE, "readonly");
-    const request = tx.objectStore(META_STORE).get(DESTINATIONS_KEY);
-    request.onsuccess = () => resolve(request.result ? request.result.value : []);
+    const request = tx.objectStore(META_STORE).get(key);
+    request.onsuccess = () => resolve(request.result ? request.result.value : null);
     request.onerror = () => reject(request.error);
   });
 }
 
-export async function setStoredDestinations(names) {
+async function setStoredList(key, value) {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(META_STORE, "readwrite");
-    tx.objectStore(META_STORE).put({ key: DESTINATIONS_KEY, value: names });
+    tx.objectStore(META_STORE).put({ key, value });
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
 }
+
+export const getStoredDestinations = () => getStoredList(DESTINATIONS_KEY);
+export const setStoredDestinations = (names) => setStoredList(DESTINATIONS_KEY, names);
+export const getStoredChipLabels = () => getStoredList(CHIP_LABELS_KEY);
+export const setStoredChipLabels = (labels) => setStoredList(CHIP_LABELS_KEY, labels);
