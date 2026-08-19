@@ -13,13 +13,14 @@
 <body>
   <header>
     <h1>Paperwork</h1>
-    <p class="subtitle">Stage 4 &mdash; folder persistence, rotation save &amp; rename <span id="app-version"></span></p>
+    <p class="subtitle">Stage 4 &mdash; folder persistence, rename &amp; filing <span id="app-version"></span></p>
   </header>
 
   <main>
     <section id="setup">
       <button id="pick-folder-btn" type="button">Choose inbox folder&hellip;</button>
       <button id="change-folder-btn" type="button" hidden>Choose a different folder&hellip;</button>
+      <button id="destinations-btn" type="button" hidden>Destinations&hellip;</button>
       <p id="status" role="status">No folder selected yet.</p>
       <progress id="progress" max="1" value="0" hidden></progress>
     </section>
@@ -59,7 +60,27 @@
       <div id="rename-chips"></div>
       <span id="rename-status" role="status"></span>
     </div>
+    <div id="destination-bar"></div>
     <p id="viewer-hint">Swipe &larr;&rarr; for pages &middot; &uarr;&darr; for documents &middot; pinch to zoom</p>
+  </div>
+
+  <div id="undo-toast" hidden>
+    <span id="undo-toast-text"></span>
+    <button id="undo-toast-btn" type="button">Undo</button>
+  </div>
+
+  <div id="destinations-screen" hidden>
+    <div id="destinations-sheet">
+      <h2>Destination folders</h2>
+      <p id="destinations-hint">Subfolders of your inbox you can file pages into with one tap. Created on disk as soon as you add them here.</p>
+      <div id="destinations-list"></div>
+      <div id="destinations-add-row">
+        <input type="text" id="destinations-add-input" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false" aria-label="New destination name" placeholder="New folder name" />
+        <button id="destinations-add-btn" type="button">Add</button>
+      </div>
+      <span id="destinations-status" role="status"></span>
+      <button id="destinations-done-btn" type="button">Done</button>
+    </div>
   </div>
 
   <div id="date-modal" hidden>

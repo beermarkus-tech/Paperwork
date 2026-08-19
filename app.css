@@ -63,7 +63,8 @@ button:disabled {
   cursor: not-allowed;
 }
 
-#change-folder-btn {
+#change-folder-btn,
+#destinations-btn {
   margin-top: 0.5rem;
   background: none;
   color: var(--navy);
@@ -382,6 +383,183 @@ button:disabled {
   font-size: 0.85rem;
 }
 
+#destination-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0 0.75rem 0.5rem;
+}
+
+#destination-bar:empty {
+  display: none;
+}
+
+.destination-btn {
+  width: auto;
+  flex: 0 1 auto;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.85rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.destination-btn:active {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* Destinations settings screen */
+#destinations-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+}
+
+#destinations-screen[hidden] {
+  display: none;
+}
+
+#destinations-sheet {
+  background: var(--paper);
+  color: #1a1a1a;
+  border-radius: 0.6rem;
+  padding: 1.25rem;
+  width: 100%;
+  max-width: 400px;
+  max-height: 85vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+#destinations-sheet h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+#destinations-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(0, 0, 0, 0.6);
+  line-height: 1.4;
+}
+
+#destinations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.destination-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 0.4rem;
+  padding: 0.5rem 0.6rem;
+}
+
+.destination-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.95rem;
+}
+
+.destination-row-remove {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.9rem;
+  background: rgba(0, 0, 0, 0.08);
+  color: #7a1f1f;
+}
+
+#destinations-empty {
+  font-size: 0.85rem;
+  color: rgba(0, 0, 0, 0.5);
+  font-style: italic;
+}
+
+#destinations-add-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+#destinations-add-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.95rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 0.4rem;
+  background: #fff;
+  color: #1a1a1a;
+}
+
+#destinations-add-btn {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 0.55rem 1rem;
+  font-size: 0.9rem;
+}
+
+#destinations-status {
+  font-size: 0.8rem;
+  min-height: 1.1em;
+}
+
+#destinations-status.error {
+  color: #b23a3a;
+}
+
+/* Undo toast */
+#undo-toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(1.25rem, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 300;
+  background: #1a1a1a;
+  color: #fff;
+  border-radius: 0.5rem;
+  padding: 0.7rem 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  max-width: calc(100% - 2rem);
+}
+
+#undo-toast[hidden] {
+  display: none;
+}
+
+#undo-toast-text {
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#undo-toast-btn {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
 /* Custom calendar popup: built ourselves instead of the native <input
    type="date"> picker, since Android Chrome only reports a value when the
    user taps a specific day in the grid — confirming the shown default with
@@ -491,7 +669,8 @@ button:disabled {
     color: #eee;
   }
 
-  #change-folder-btn {
+  #change-folder-btn,
+  #destinations-btn {
     color: #9fb3d9;
   }
 

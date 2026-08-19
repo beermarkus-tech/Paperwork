@@ -1,6 +1,6 @@
 # Paperwork
 
-A Progressive Web App for local PDF triage. See the full spec in the project notes; this repo currently implements through the start of **Stage 4** of the development roadmap.
+A Progressive Web App for local PDF triage. See the full spec in the project notes; this repo currently implements through **Stage 4** of the development roadmap.
 
 ## Stage 1 — Foundational File System Access
 
@@ -42,7 +42,7 @@ Full page-editing (split, join, delete, undo) is Stage 5, but rotation-saving wa
 - After a successful save, the thumbnail for that file is re-rendered and re-cached in the background, so the strip doesn't show a stale (unrotated) thumbnail after you rotate and back out.
 - Known limitation: closing the app within the debounce window, before either trigger fires, loses that specific pending change — the same tradeoff most autosave systems make.
 
-## Stage 4 — Folder Persistence (in progress)
+## Stage 4 — Folder Persistence, Rename & Filing
 
 - On a successful folder pick, the `FileSystemDirectoryHandle` itself is stored in IndexedDB (`idb.js`) — handles are structured-cloneable and this is the documented pattern for persisting File System Access API access across page loads.
 - On launch, if a handle is stored, the app calls `queryPermission()` on it (no user gesture needed for a *query*, only for a *request*): if permission is still `"granted"`, the folder loads automatically with no tap required. If Chrome has downgraded it back to `"prompt"` (typically after the browser fully restarts), the primary button changes to `Reconnect to "<folder>"…` — tapping it calls `requestPermission()`, which is allowed to show its native prompt because the tap itself is the required user gesture.
@@ -60,7 +60,12 @@ A bar below the viewer stage, built and wired to a real on-disk rename together 
 - On success, updates everything keyed by the old filename in place: the in-session rotation map, the cached thumbnail (re-keyed without a wasted re-render, since the file content didn't change), and the thumbnail strip's caption. (The viewer toolbar itself just shows "Page X of Y" — no filename — so there's nothing there to update.)
 - Known simplification: the thumbnail strip doesn't re-sort after a rename within the same session (it re-sorts fresh on the next folder scan) — re-sorting live would mean relocating DOM nodes and remapping indices used for document-to-document swipe navigation, and didn't seem worth the complexity yet.
 
-Still to come in Stage 4: the destination-folder settings screen and tap-to-file (rename + move in one tap).
+### Destination folders & tap-to-file
+
+- A "Destinations…" link appears on the setup screen once a folder is loaded. It opens a small screen (`#destinations-screen`) for managing a personal list of subfolder names — each one is created inside the current inbox folder (`getDirectoryHandle(name, { create: true })`) the moment you add it, and re-created if missing every time a folder loads (`ensureDestinationFoldersExist`), so switching to a different inbox folder gets the same set of category folders too. Removing a destination from the list only stops offering it as a filing target — it does not delete the folder or anything already filed into it.
+- Each destination appears as a button in a row below the rename bar (`#destination-bar`) whenever a document is open. Tapping one takes whatever filename is currently showing — untouched is fine, there's no requirement to have edited it or pressed the rename checkmark first — and moves the file straight into that subfolder under that name, in one motion, via a generalized `moveFileHandle()` (`file-ops.js`) that handles both same-directory renames and cross-directory moves through the same `FileSystemFileHandle.move()`-with-copy+delete-fallback logic as the rename bar. Blocked the same way rename is on an empty name, illegal characters, or a name collision — this time checked against the destination folder rather than the current one.
+- After a successful move, that file disappears from the current session's document stack and thumbnail strip immediately (no folder rescan needed), and the viewer auto-advances to what's now at the same position — letting a stack of scans be filed one after another as: adjust name → tap destination → repeat.
+- A brief "Filed to…" toast with an **Undo** button appears at the bottom for 5 seconds after each move. Undo moves the file straight back to its original name and folder; if the viewer is still open it closes back to the (freshly rescanned) thumbnail grid, since the viewer's in-session document list doesn't attempt to splice the restored file back into its old position live.
 
 ## Running locally
 
@@ -91,6 +96,7 @@ The setup screen's subtitle shows a version number (`APP_VERSION` in `app.js`), 
 7. Tap "Choose a different folder…" and confirm you can switch to a different folder without anything getting stuck.
 8. Rotate a page a couple of times, then either wait ~2.5s or swipe away — the status indicator should spin, then show a checkmark. Reopen that same document later (or fully reload the app) and confirm the rotation actually stuck, and that the thumbnail strip reflects the new orientation too.
 9. In the rename bar, tap the calendar button and pick a date, tap a couple of template chips, edit the text, then tap **Rename**. Confirm the thumbnail strip's caption updates, back out and reopen the document to confirm the filename actually changed on disk, and check the actual file in your device's file manager if you want to be extra sure. Also try renaming to a name that already exists in the folder — it should refuse with a message rather than silently overwriting the other file.
+10. On the setup screen, tap "Destinations…" and add a couple of subfolder names; confirm they actually appear as real folders in your inbox via a file manager. Open a document, confirm the same names now show as buttons below the rename bar, and tap one — the document should disappear from the grid, the viewer should move to the next one, and the file should now be sitting in that subfolder under the name that was showing. Tap **Undo** on the toast that appears and confirm it lands back in the inbox with its original name. Also try filing to a destination that already has a same-named file in it — it should refuse rather than overwrite.
 
 If you've already installed Paperwork to your home screen from an earlier stage and an update doesn't seem to take effect, the installed app (a WebAPK) can get stuck on stale cached files. Uninstalling and reinstalling via "Add to Home screen" is the most reliable fix — more reliable than in-place "Clear cache"/"Clear storage" from Android's App Info screen, which has been inconsistent in testing.
 

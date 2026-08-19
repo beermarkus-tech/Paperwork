@@ -3,24 +3,39 @@ import {
   putCachedThumbnail,
   getStoredFolderHandle,
   setStoredFolderHandle,
+  getStoredDestinations,
+  setStoredDestinations,
 } from "./idb.js";
 import { renderFirstPageThumbnail } from "./pdf-thumbnails.js";
 import { loadDocument, renderPageToCanvas } from "./pdf-viewer.js";
 import { savePageRotation } from "./pdf-rotate.js";
-import { renameFileHandle } from "./file-ops.js";
+import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js";
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 25;
+const APP_VERSION = 26;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
 const pickBtn = document.getElementById("pick-folder-btn");
 const changeFolderBtn = document.getElementById("change-folder-btn");
+const destinationsBtn = document.getElementById("destinations-btn");
 const statusEl = document.getElementById("status");
 const progressEl = document.getElementById("progress");
 const resultsEl = document.getElementById("results");
 const stripEl = document.getElementById("thumbnail-strip");
+
+const destinationsScreen = document.getElementById("destinations-screen");
+const destinationsList = document.getElementById("destinations-list");
+const destinationsAddInput = document.getElementById("destinations-add-input");
+const destinationsAddBtn = document.getElementById("destinations-add-btn");
+const destinationsStatusEl = document.getElementById("destinations-status");
+const destinationsDoneBtn = document.getElementById("destinations-done-btn");
+
+const destinationBarEl = document.getElementById("destination-bar");
+const undoToast = document.getElementById("undo-toast");
+const undoToastText = document.getElementById("undo-toast-text");
+const undoToastBtn = document.getElementById("undo-toast-btn");
 
 const viewerEl = document.getElementById("viewer");
 const viewerStageEl = document.getElementById("viewer-stage");
@@ -388,6 +403,7 @@ function populateRenameBar(entry) {
   renameInput.value = entry.name.replace(PDF_EXTENSION_RE, "");
   setRenameStatus(null);
   setRenameButtonState(null);
+  renderDestinationBar();
 }
 
 // Mobile Chrome sometimes repositions the cursor right after a tap-triggered
@@ -585,6 +601,259 @@ async function commitRename() {
   }
 }
 
+// --- Destination folders & tap-to-file ---
+
+let destinations = [];
+
+function renderDestinationsList() {
+  destinationsList.innerHTML = "";
+  if (destinations.length === 0) {
+    const empty = document.createElement("p");
+    empty.id = "destinations-empty";
+    empty.textContent = "No destinations yet — add one below.";
+    destinationsList.appendChild(empty);
+    return;
+  }
+  for (const name of destinations) {
+    const row = document.createElement("div");
+    row.className = "destination-row";
+
+    const nameEl = document.createElement("span");
+    nameEl.className = "destination-row-name";
+    nameEl.textContent = name;
+    row.appendChild(nameEl);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "destination-row-remove";
+    removeBtn.setAttribute("aria-label", `Remove ${name}`);
+    removeBtn.textContent = "✕";
+    removeBtn.addEventListener("click", () => removeDestination(name));
+    row.appendChild(removeBtn);
+
+    destinationsList.appendChild(row);
+  }
+}
+
+function renderDestinationBar() {
+  destinationBarEl.innerHTML = "";
+  for (const name of destinations) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "destination-btn";
+    btn.textContent = name;
+    btn.addEventListener("click", () => {
+      fileCurrentDocumentTo(name).catch((err) => {
+        console.error(`Failed to file into "${name}":`, err);
+        setRenameStatus("error", `⚠️ ${err.message || err}`);
+      });
+    });
+    destinationBarEl.appendChild(btn);
+  }
+}
+
+async function ensureDestinationFoldersExist(dirHandle) {
+  for (const name of destinations) {
+    try {
+      await dirHandle.getDirectoryHandle(name, { create: true });
+    } catch (err) {
+      console.error(`Failed to ensure destination folder "${name}" exists:`, err);
+    }
+  }
+}
+
+async function removeDestination(name) {
+  destinations = destinations.filter((d) => d !== name);
+  renderDestinationsList();
+  renderDestinationBar();
+  try {
+    await setStoredDestinations(destinations);
+  } catch (err) {
+    console.error("Failed to persist destinations:", err);
+  }
+}
+
+function setDestinationsStatus(kind, message) {
+  destinationsStatusEl.textContent = message || "";
+  destinationsStatusEl.className = kind || "";
+}
+
+async function addDestination() {
+  const name = destinationsAddInput.value.trim();
+  setDestinationsStatus(null);
+
+  if (!name) return;
+  if (ILLEGAL_FILENAME_CHARS_RE.test(name)) {
+    setDestinationsStatus("error", `Name can't contain \\ / : * ? " < > |`);
+    return;
+  }
+  if (destinations.includes(name)) {
+    setDestinationsStatus("error", `"${name}" is already in the list.`);
+    return;
+  }
+  if (!currentDirHandle) {
+    setDestinationsStatus("error", "Choose an inbox folder first.");
+    return;
+  }
+
+  destinationsAddBtn.disabled = true;
+  try {
+    await currentDirHandle.getDirectoryHandle(name, { create: true });
+    destinations = [...destinations, name];
+    await setStoredDestinations(destinations);
+    renderDestinationsList();
+    renderDestinationBar();
+    destinationsAddInput.value = "";
+  } catch (err) {
+    console.error(`Failed to create destination folder "${name}":`, err);
+    setDestinationsStatus("error", `⚠️ ${err.message || err}`);
+  } finally {
+    destinationsAddBtn.disabled = false;
+  }
+}
+
+destinationsBtn.addEventListener("click", () => {
+  renderDestinationsList();
+  setDestinationsStatus(null);
+  destinationsScreen.hidden = false;
+});
+
+destinationsDoneBtn.addEventListener("click", () => {
+  destinationsScreen.hidden = true;
+});
+
+destinationsAddBtn.addEventListener("click", () => {
+  addDestination();
+});
+
+destinationsAddInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    addDestination();
+  }
+});
+
+function setDestinationBarDisabled(disabled) {
+  for (const btn of destinationBarEl.querySelectorAll("button")) {
+    btn.disabled = disabled;
+  }
+}
+
+function removeEntryFromViewer(entry, name) {
+  const idx = viewerState.entries.indexOf(entry);
+  if (idx !== -1) viewerState.entries.splice(idx, 1);
+  const elements = entryElements.get(entry);
+  if (elements) {
+    elements.item.remove();
+    entryElements.delete(entry);
+  }
+  rotationsByDocument.delete(name);
+}
+
+function advanceAfterFiling(index) {
+  if (viewerState.entries.length === 0) {
+    closeViewer();
+    resultsEl.hidden = true;
+    if (currentFolderName) {
+      statusEl.textContent = `Found 0 PDFs in "${currentFolderName}".`;
+    }
+    return;
+  }
+  const nextIndex = Math.min(index, viewerState.entries.length - 1);
+  openDocumentAt(nextIndex).catch((err) => {
+    console.error("Failed to open next document after filing:", err);
+  });
+}
+
+async function fileCurrentDocumentTo(destinationName) {
+  if (!viewerState.pdf || !currentDirHandle) return;
+  const entry = viewerState.entries[viewerState.index];
+  const index = viewerState.index;
+  const trimmed = renameInput.value.trim();
+  setRenameStatus(null);
+
+  if (!trimmed) {
+    setRenameStatus("error", "Filename can't be empty.");
+    return;
+  }
+  if (ILLEGAL_FILENAME_CHARS_RE.test(trimmed)) {
+    setRenameStatus("error", `Filename can't contain \\ / : * ? " < > |`);
+    return;
+  }
+
+  const newName = `${trimmed}.pdf`;
+  const oldName = entry.name;
+  const sourceDirHandle = currentDirHandle;
+
+  await flushPendingRotationSave();
+
+  let destDirHandle;
+  try {
+    destDirHandle = await sourceDirHandle.getDirectoryHandle(destinationName, { create: true });
+  } catch (err) {
+    setRenameStatus("error", `Couldn't open "${destinationName}": ${err.message || err}`);
+    return;
+  }
+
+  const collision = await fileExistsInDir(destDirHandle, newName);
+  if (collision) {
+    setRenameStatus("error", `"${newName}" already exists in "${destinationName}".`);
+    return;
+  }
+
+  setDestinationBarDisabled(true);
+  renameApplyBtn.disabled = true;
+  try {
+    const newHandle = await moveFileHandle(sourceDirHandle, entry.handle, oldName, destDirHandle, newName);
+    removeEntryFromViewer(entry, oldName);
+    showUndoToast({ destDirHandle, destName: newName, destinationName, sourceDirHandle, originalName: oldName, newHandle });
+    advanceAfterFiling(index);
+  } finally {
+    setDestinationBarDisabled(false);
+    renameApplyBtn.disabled = false;
+  }
+}
+
+let undoToastTimer = null;
+let pendingUndo = null;
+
+function hideUndoToast() {
+  undoToast.hidden = true;
+  if (undoToastTimer) {
+    clearTimeout(undoToastTimer);
+    undoToastTimer = null;
+  }
+  pendingUndo = null;
+}
+
+function showUndoToast({ destDirHandle, destName, destinationName, sourceDirHandle, originalName, newHandle }) {
+  pendingUndo = { destDirHandle, destName, sourceDirHandle, originalName, newHandle };
+  undoToastText.textContent = `Filed to "${destinationName}"`;
+  undoToast.hidden = false;
+  if (undoToastTimer) clearTimeout(undoToastTimer);
+  undoToastTimer = setTimeout(hideUndoToast, 5000);
+}
+
+undoToastBtn.addEventListener("click", async () => {
+  if (!pendingUndo) return;
+  const { destDirHandle, destName, sourceDirHandle, originalName, newHandle } = pendingUndo;
+  hideUndoToast();
+  try {
+    await moveFileHandle(destDirHandle, newHandle, destName, sourceDirHandle, originalName);
+  } catch (err) {
+    console.error("Failed to undo filing:", err);
+    statusEl.textContent = `⚠️ Couldn't undo: ${err.message || err}`;
+    return;
+  }
+  if (!viewerEl.hidden) await closeViewer();
+  if (sourceDirHandle === currentDirHandle) {
+    loadFolder(currentDirHandle).catch((err) => {
+      statusEl.textContent = `⚠️ ${err.message || err}`;
+      console.error(err);
+    });
+  }
+});
+
 const EXIT_MS = 80;
 const ENTER_MS = 120;
 let isNavigating = false;
@@ -779,6 +1048,8 @@ async function loadFolder(dirHandle) {
   entryElements.clear();
   currentFolderName = dirHandle.name;
   currentDirHandle = dirHandle;
+  destinationsBtn.hidden = false;
+  ensureDestinationFoldersExist(dirHandle);
   stripEl.innerHTML = "";
   if (entries.length === 0) {
     resultsEl.hidden = true;
@@ -861,6 +1132,16 @@ async function attemptAutoReconnect() {
     statusEl.textContent = `Tap to reconfirm access to "${stored.name}".`;
   }
 }
+
+getStoredDestinations()
+  .then((stored) => {
+    destinations = stored || [];
+    renderDestinationBar();
+    if (currentDirHandle) ensureDestinationFoldersExist(currentDirHandle);
+  })
+  .catch((err) => {
+    console.error("Failed to read stored destinations:", err);
+  });
 
 if (!("showDirectoryPicker" in window)) {
   statusEl.textContent =

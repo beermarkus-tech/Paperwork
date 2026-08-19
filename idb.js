@@ -3,6 +3,7 @@ const DB_VERSION = 2;
 const THUMBNAIL_STORE = "thumbnails";
 const META_STORE = "meta";
 const FOLDER_HANDLE_KEY = "inboxFolderHandle";
+const DESTINATIONS_KEY = "destinations";
 
 let dbPromise = null;
 
@@ -61,6 +62,26 @@ export async function setStoredFolderHandle(handle) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(META_STORE, "readwrite");
     tx.objectStore(META_STORE).put({ key: FOLDER_HANDLE_KEY, value: handle });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function getStoredDestinations() {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(META_STORE, "readonly");
+    const request = tx.objectStore(META_STORE).get(DESTINATIONS_KEY);
+    request.onsuccess = () => resolve(request.result ? request.result.value : []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function setStoredDestinations(names) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(META_STORE, "readwrite");
+    tx.objectStore(META_STORE).put({ key: DESTINATIONS_KEY, value: names });
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
