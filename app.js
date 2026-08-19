@@ -209,19 +209,68 @@ async function closeViewer() {
   }
 }
 
+const EXIT_MS = 140;
+const ENTER_MS = 200;
+let isNavigating = false;
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function animateNavigation(axis, direction, performNavigation) {
+  if (isNavigating) return;
+  isNavigating = true;
+  try {
+    const distance =
+      axis === "x" ? viewerStageEl.clientWidth * 0.35 : viewerStageEl.clientHeight * 0.35;
+    const exitOffset = direction > 0 ? -distance : distance;
+    const enterOffset = -exitOffset;
+    const translate = (px) => (axis === "x" ? `translateX(${px}px)` : `translateY(${px}px)`);
+
+    viewerCanvas.style.transition = `transform ${EXIT_MS}ms ease-in, opacity ${EXIT_MS}ms ease-in`;
+    requestAnimationFrame(() => {
+      viewerCanvas.style.transform = translate(exitOffset);
+      viewerCanvas.style.opacity = "0";
+    });
+    await wait(EXIT_MS);
+
+    await performNavigation();
+
+    viewerCanvas.style.transition = "none";
+    viewerCanvas.style.transform = translate(enterOffset);
+    viewerCanvas.style.opacity = "0";
+    void viewerCanvas.offsetWidth; // force reflow so the next transition starts from here
+
+    viewerCanvas.style.transition = `transform ${ENTER_MS}ms ease-out, opacity ${ENTER_MS}ms ease-out`;
+    requestAnimationFrame(() => {
+      viewerCanvas.style.transform = "translate(0px, 0px)";
+      viewerCanvas.style.opacity = "1";
+    });
+    await wait(ENTER_MS);
+    viewerCanvas.style.transition = "";
+  } finally {
+    isNavigating = false;
+  }
+}
+
 function goToPage(delta) {
-  if (!viewerState.pdf) return;
+  if (!viewerState.pdf || isNavigating) return;
   const next = viewerState.pageNumber + delta;
   if (next < 1 || next > viewerState.pdf.numPages) return;
-  viewerState.pageNumber = next;
-  resetZoomPan();
-  renderCurrentPage().catch((err) => console.error("Failed to render page:", err));
+  animateNavigation("x", delta, async () => {
+    viewerState.pageNumber = next;
+    resetZoomPan();
+    await renderCurrentPage();
+  }).catch((err) => console.error("Failed to render page:", err));
 }
 
 function goToDocument(delta) {
+  if (isNavigating) return;
   const next = viewerState.index + delta;
   if (next < 0 || next >= viewerState.entries.length) return;
-  openDocumentAt(next).catch((err) => console.error("Failed to open document:", err));
+  animateNavigation("y", delta, () => openDocumentAt(next)).catch((err) =>
+    console.error("Failed to open document:", err),
+  );
 }
 
 viewerCloseBtn.addEventListener("click", closeViewer);

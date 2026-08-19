@@ -86,24 +86,19 @@ button:disabled {
 }
 
 #thumbnail-strip {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.75rem;
-  overflow-x: auto;
-  padding-bottom: 0.5rem;
-  -webkit-overflow-scrolling: touch;
-  scroll-snap-type: x proximity;
 }
 
 .thumb-item {
-  flex: 0 0 auto;
-  width: 130px;
+  width: 100%;
   cursor: pointer;
-  scroll-snap-align: start;
 }
 
 .thumb-image {
-  width: 130px;
-  height: 168px;
+  width: 100%;
+  aspect-ratio: 3 / 4;
   background: #fff;
   border: 2px solid transparent;
   border-radius: 0.4rem;
@@ -208,7 +203,7 @@ button:disabled {
   max-width: 100%;
   max-height: 100%;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
-  will-change: transform;
+  will-change: transform, opacity;
   transform-origin: center center;
   touch-action: none;
 }
