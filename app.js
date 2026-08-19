@@ -407,7 +407,7 @@ async function commitRename() {
   renameApplyBtn.disabled = true;
   setRenameStatus(null, "Renaming…");
   try {
-    await renameFileHandle(currentDirHandle, entry.handle, oldName, newName);
+    entry.handle = await renameFileHandle(currentDirHandle, entry.handle, oldName, newName);
     entry.name = newName;
     entry.file = await entry.handle.getFile();
     entry.size = entry.file.size;
