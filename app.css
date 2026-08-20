@@ -244,12 +244,13 @@ button:disabled {
   position: relative;
 }
 
-/* While the on-screen keyboard is up, hide the PDF preview so the toolbar,
-   rename field, chips, and destination buttons get to use the space the
-   keyboard would otherwise squeeze them into. Destination buttons stay
+/* While the on-screen keyboard is up, hide the toolbar and PDF preview so
+   the rename field, chips, and destination buttons get to use the space
+   the keyboard would otherwise squeeze them into. Destination buttons stay
    visible either way; the chip labels only make sense while typing, so
    they swap the other direction — hidden with the preview, shown with the
    keyboard. */
+#viewer.keyboard-open #viewer-toolbar,
 #viewer.keyboard-open #viewer-stage {
   display: none;
 }
