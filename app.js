@@ -18,13 +18,12 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 32;
+const APP_VERSION = 33;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
 const pickBtn = document.getElementById("pick-folder-btn");
 const changeFolderBtn = document.getElementById("change-folder-btn");
-const destinationsBtn = document.getElementById("destinations-btn");
 const statusEl = document.getElementById("status");
 const progressEl = document.getElementById("progress");
 const resultsEl = document.getElementById("results");
@@ -38,6 +37,7 @@ const destinationsStatusEl = document.getElementById("destinations-status");
 const destinationsDoneBtn = document.getElementById("destinations-done-btn");
 
 const destinationBarEl = document.getElementById("destination-bar");
+const editDestinationsBtn = document.getElementById("edit-destinations-btn");
 const undoToast = document.getElementById("undo-toast");
 const undoToastText = document.getElementById("undo-toast-text");
 const undoToastBtn = document.getElementById("undo-toast-btn");
@@ -772,10 +772,6 @@ async function addDestination() {
     setDestinationsStatus("error", `"${name}" is already in the list.`);
     return;
   }
-  if (!currentDirHandle) {
-    setDestinationsStatus("error", "Choose an inbox folder first.");
-    return;
-  }
 
   destinationsAddBtn.disabled = true;
   try {
@@ -793,7 +789,7 @@ async function addDestination() {
   }
 }
 
-destinationsBtn.addEventListener("click", () => {
+editDestinationsBtn.addEventListener("click", () => {
   renderDestinationsList();
   setDestinationsStatus(null);
   destinationsScreen.hidden = false;
@@ -1340,7 +1336,6 @@ async function loadFolder(dirHandle) {
   entryElements.clear();
   currentFolderName = dirHandle.name;
   currentDirHandle = dirHandle;
-  destinationsBtn.hidden = false;
   syncDestinationsWithFolder(dirHandle);
   stripEl.innerHTML = "";
   if (entries.length === 0) {

@@ -63,8 +63,7 @@ button:disabled {
   cursor: not-allowed;
 }
 
-#change-folder-btn,
-#destinations-btn {
+#change-folder-btn {
   margin-top: 0.5rem;
   background: none;
   color: var(--navy);
@@ -442,16 +441,30 @@ button:disabled {
   color: #6fcf97;
 }
 
-#destination-bar {
+#destination-bar-row {
   flex: 0 0 auto;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.5rem;
   padding: 0 0.75rem max(0.5rem, env(safe-area-inset-bottom));
 }
 
-#destination-bar:empty {
-  display: none;
+#destination-bar {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+#edit-destinations-btn {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 0.4rem 0.6rem;
+  font-size: 1rem;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 .destination-btn {
@@ -733,8 +746,7 @@ button:disabled {
     color: #eee;
   }
 
-  #change-folder-btn,
-  #destinations-btn {
+  #change-folder-btn {
     color: #9fb3d9;
   }
 
