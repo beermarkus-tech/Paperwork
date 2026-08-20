@@ -8,6 +8,15 @@
   box-sizing: border-box;
 }
 
+/* Stops Android Chrome's pull-to-refresh (and any edge-of-page overscroll
+   bounce/navigation) from firing when a pull-down gesture reaches the top
+   of a scrollable area with nowhere further to scroll — this is a PWA, so
+   a stray pull-down reloading the whole app and losing viewer state is
+   much worse than it would be for a regular page. */
+html {
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -16,6 +25,7 @@ body {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  overscroll-behavior: none;
 }
 
 header {

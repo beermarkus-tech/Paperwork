@@ -16,7 +16,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 38;
+const APP_VERSION = 39;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
@@ -1659,7 +1659,11 @@ async function attemptAutoReconnect() {
   } else {
     pendingReconnectHandle = stored;
     updateFolderButtons();
-    statusEl.textContent = `Tap to reconfirm access to "${stored.name}".`;
+    // The button itself already reads `Reconnect to "X"…` (updateFolderButtons),
+    // so a separate status line repeating that would just be redundant — but
+    // still clear the stale "No folder selected yet." default, since that's
+    // actively wrong here (a folder was selected, it just needs reconfirming).
+    statusEl.textContent = "";
   }
 }
 
