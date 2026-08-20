@@ -16,7 +16,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 40;
+const APP_VERSION = 41;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
@@ -1549,16 +1549,9 @@ let pendingReconnectHandle = null;
 
 function updateFolderButtons() {
   if (pendingReconnectHandle) {
-    const label = `Reconnect to "${pendingReconnectHandle.name}"…`;
-    pickBtn.setAttribute("aria-label", label);
-    pickBtn.title = label;
-    pickBtn.classList.add("needs-attention");
-    changeFolderBtn.hidden = false;
+    pickBtn.textContent = `Reconnect to "${pendingReconnectHandle.name}"…`;
   } else {
-    pickBtn.setAttribute("aria-label", "Choose inbox folder");
-    pickBtn.title = "Choose inbox folder";
-    pickBtn.classList.remove("needs-attention");
-    changeFolderBtn.hidden = true;
+    pickBtn.textContent = "Choose inbox folder…";
   }
 }
 
@@ -1668,9 +1661,11 @@ async function attemptAutoReconnect() {
   } else {
     pendingReconnectHandle = stored;
     updateFolderButtons();
-    // The folder button is icon-only now, so its state isn't visible at a
-    // glance the way "Reconnect to X…" text was — spell it out here instead.
-    statusEl.textContent = `Tap the folder icon to reconnect to "${stored.name}".`;
+    // The button itself already reads `Reconnect to "X"…` (updateFolderButtons),
+    // so a separate status line repeating that would just be redundant — but
+    // still clear the stale "No folder selected yet." default, since that's
+    // actively wrong here (a folder was selected, it just needs reconfirming).
+    statusEl.textContent = "";
   }
 }
 
@@ -1702,6 +1697,7 @@ if (!("showDirectoryPicker" in window)) {
     "This browser does not support the File System Access API (showDirectoryPicker). " +
     "Paperwork needs a Chromium browser with this API available.";
   pickBtn.disabled = true;
+  changeFolderBtn.disabled = true;
 } else {
   pickBtn.addEventListener("click", () => {
     if (pendingReconnectHandle) {

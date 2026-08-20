@@ -66,10 +66,6 @@ header h1 {
   background: rgba(255, 255, 255, 0.15);
 }
 
-#pick-folder-btn.needs-attention {
-  background: #b23a3a;
-}
-
 main {
   flex: 1;
   padding: 1.25rem;
@@ -96,15 +92,6 @@ button:active {
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-#change-folder-btn {
-  margin-bottom: 0.5rem;
-  background: none;
-  color: var(--navy);
-  padding: 0.4rem 0.5rem;
-  font-size: 0.85rem;
-  text-decoration: underline;
 }
 
 #status {
@@ -845,10 +832,6 @@ button:disabled {
   body {
     background: #14141a;
     color: #eee;
-  }
-
-  #change-folder-btn {
-    color: #9fb3d9;
   }
 
   .thumb-image {
