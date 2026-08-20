@@ -11,12 +11,12 @@ import {
 import { renderFirstPageThumbnail } from "./pdf-thumbnails.js";
 import { loadDocument, renderPageToCanvas } from "./pdf-viewer.js";
 import { savePageRotation } from "./pdf-rotate.js";
-import { deletePageFromFile, restoreFileBytes } from "./pdf-pages.js";
+import { deletePageFromFile, restoreFileBytes, splitPdfIntoPages, joinPdfFiles } from "./pdf-pages.js";
 import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js";
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 37;
+const APP_VERSION = 38;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
@@ -27,6 +27,11 @@ const progressEl = document.getElementById("progress");
 const resultsEl = document.getElementById("results");
 const resultsHeading = document.getElementById("results-heading");
 const stripEl = document.getElementById("thumbnail-strip");
+const splitBtn = document.getElementById("split-btn");
+const joinBtn = document.getElementById("join-btn");
+const batchToast = document.getElementById("batch-toast");
+const batchToastText = document.getElementById("batch-toast-text");
+const batchToastBtn = document.getElementById("batch-toast-btn");
 
 const destinationsScreen = document.getElementById("destinations-screen");
 const destinationsList = document.getElementById("destinations-list");
@@ -115,6 +120,10 @@ function buildThumbnailItem(entry, onOpen) {
   item.appendChild(size);
 
   item.addEventListener("click", () => {
+    if (batchMode) {
+      toggleBatchSelection(entry);
+      return;
+    }
     for (const el of stripEl.querySelectorAll(".thumb-item.selected")) {
       el.classList.remove("selected");
     }
@@ -139,6 +148,225 @@ function setThumbnailImage(imgWrap, blob) {
 const entryElements = new Map();
 let currentFolderName = null;
 let currentDirHandle = null;
+
+// --- Split & join (batch mode on the thumbnail grid) ---
+// "batchMode" arms one of the two buttons; a second tap on the same button
+// confirms whatever's selected (or, with nothing selected, just cancels).
+// Split only ever keeps one entry selected — tapping a different one moves
+// the selection rather than adding to it. Join keeps an ordered list, shown
+// as numbered badges, so the join order matches tap order.
+let batchMode = null; // "split" | "join" | null
+let batchSelection = [];
+
+function updateBatchButtons() {
+  splitBtn.textContent = batchMode === "split" ? "✓" : "✂️";
+  splitBtn.classList.toggle("armed", batchMode === "split");
+  splitBtn.disabled = batchMode === "join";
+  joinBtn.textContent = batchMode === "join" ? "✓" : "🔗";
+  joinBtn.classList.toggle("armed", batchMode === "join");
+  joinBtn.disabled = batchMode === "split";
+}
+
+function renderBatchSelection() {
+  for (const { item, imgWrap } of entryElements.values()) {
+    item.classList.remove("batch-selected");
+    const badge = imgWrap.querySelector(".batch-badge");
+    if (badge) badge.remove();
+  }
+  batchSelection.forEach((entry, i) => {
+    const elements = entryElements.get(entry);
+    if (!elements) return;
+    elements.item.classList.add("batch-selected");
+    if (batchMode === "join") {
+      const badge = document.createElement("span");
+      badge.className = "batch-badge";
+      badge.textContent = String(i + 1);
+      elements.imgWrap.appendChild(badge);
+    }
+  });
+}
+
+function toggleBatchSelection(entry) {
+  const idx = batchSelection.indexOf(entry);
+  if (idx !== -1) {
+    batchSelection.splice(idx, 1);
+  } else if (batchMode === "split") {
+    batchSelection = [entry];
+  } else {
+    batchSelection.push(entry);
+  }
+  renderBatchSelection();
+}
+
+function enterBatchMode(mode) {
+  batchMode = mode;
+  batchSelection = [];
+  renderBatchSelection();
+  updateBatchButtons();
+  statusEl.textContent =
+    mode === "split" ? "Tap a PDF to split it into pages." : "Tap PDFs in the order to join them, then tap Join again.";
+}
+
+function exitBatchMode() {
+  batchMode = null;
+  batchSelection = [];
+  renderBatchSelection();
+  updateBatchButtons();
+  statusEl.textContent = "";
+}
+
+function zeroPad(n, width) {
+  return String(n).padStart(width, "0");
+}
+
+async function performSplit(entry) {
+  const oldName = entry.name;
+  const baseName = oldName.replace(PDF_EXTENSION_RE, "");
+
+  let pages;
+  try {
+    pages = await splitPdfIntoPages(entry.file);
+  } catch (err) {
+    statusEl.textContent = `⚠️ Couldn't split "${oldName}": ${err.message || err}`;
+    return;
+  }
+
+  const width = String(pages.length).length;
+  const targetNames = pages.map((_, i) => `${baseName} ${zeroPad(i + 1, width)}.pdf`);
+  for (const name of targetNames) {
+    if (await fileExistsInDir(currentDirHandle, name)) {
+      statusEl.textContent = `⚠️ Can't split: "${name}" already exists in this folder.`;
+      return;
+    }
+  }
+
+  const backupBytes = await entry.file.arrayBuffer();
+  try {
+    for (let i = 0; i < targetNames.length; i += 1) {
+      const handle = await currentDirHandle.getFileHandle(targetNames[i], { create: true });
+      const writable = await handle.createWritable();
+      try {
+        await writable.write(pages[i]);
+      } finally {
+        await writable.close();
+      }
+    }
+    await currentDirHandle.removeEntry(oldName);
+  } catch (err) {
+    for (const name of targetNames) {
+      await currentDirHandle.removeEntry(name).catch(() => {});
+    }
+    statusEl.textContent = `⚠️ Couldn't split "${oldName}": ${err.message || err}`;
+    return;
+  }
+
+  const dirHandle = currentDirHandle;
+  statusEl.textContent = "";
+  gridToast.show(`Split "${oldName}" into ${targetNames.length} pages`, {
+    restore: async () => {
+      for (const name of targetNames) {
+        await dirHandle.removeEntry(name).catch(() => {});
+      }
+      const newHandle = await dirHandle.getFileHandle(oldName, { create: true });
+      await restoreFileBytes(newHandle, backupBytes);
+      await loadFolder(dirHandle);
+    },
+  });
+
+  await loadFolder(dirHandle);
+}
+
+async function performJoin(entries) {
+  const firstEntry = entries[0];
+  const baseName = firstEntry.name.replace(PDF_EXTENSION_RE, "");
+  const targetName = `${baseName} joined.pdf`;
+
+  if (await fileExistsInDir(currentDirHandle, targetName)) {
+    statusEl.textContent = `⚠️ Can't join: "${targetName}" already exists in this folder.`;
+    return;
+  }
+
+  let joinedBytes;
+  try {
+    joinedBytes = await joinPdfFiles(entries.map((e) => e.file));
+  } catch (err) {
+    statusEl.textContent = `⚠️ Couldn't join PDFs: ${err.message || err}`;
+    return;
+  }
+
+  const originalNames = entries.map((e) => e.name);
+  const backups = await Promise.all(entries.map((e) => e.file.arrayBuffer()));
+
+  const dirHandle = currentDirHandle;
+  try {
+    const handle = await dirHandle.getFileHandle(targetName, { create: true });
+    const writable = await handle.createWritable();
+    try {
+      await writable.write(joinedBytes);
+    } finally {
+      await writable.close();
+    }
+    for (const name of originalNames) {
+      await dirHandle.removeEntry(name);
+    }
+  } catch (err) {
+    await dirHandle.removeEntry(targetName).catch(() => {});
+    statusEl.textContent = `⚠️ Couldn't join PDFs: ${err.message || err}`;
+    return;
+  }
+
+  statusEl.textContent = "";
+  gridToast.show(`Joined ${entries.length} PDFs into "${targetName}"`, {
+    restore: async () => {
+      await dirHandle.removeEntry(targetName).catch(() => {});
+      for (let i = 0; i < originalNames.length; i += 1) {
+        const handle = await dirHandle.getFileHandle(originalNames[i], { create: true });
+        await restoreFileBytes(handle, backups[i]);
+      }
+      await loadFolder(dirHandle);
+    },
+  });
+
+  await loadFolder(dirHandle);
+}
+
+splitBtn.addEventListener("click", () => {
+  if (batchMode !== "split") {
+    enterBatchMode("split");
+    return;
+  }
+  if (batchSelection.length === 0) {
+    exitBatchMode();
+    return;
+  }
+  const entry = batchSelection[0];
+  if (entry.pageCount === 1) {
+    gridToast.show(`"${entry.name}" only has one page — nothing to split.`, { duration: 3000 });
+    return;
+  }
+  exitBatchMode();
+  performSplit(entry).catch((err) => {
+    console.error(`Failed to split "${entry.name}":`, err);
+    statusEl.textContent = `⚠️ Couldn't split "${entry.name}": ${err.message || err}`;
+  });
+});
+
+joinBtn.addEventListener("click", () => {
+  if (batchMode !== "join") {
+    enterBatchMode("join");
+    return;
+  }
+  if (batchSelection.length < 2) {
+    exitBatchMode();
+    return;
+  }
+  const entries = [...batchSelection];
+  exitBatchMode();
+  performJoin(entries).catch((err) => {
+    console.error("Failed to join PDFs:", err);
+    statusEl.textContent = `⚠️ Couldn't join PDFs: ${err.message || err}`;
+  });
+});
 
 async function renderAndCacheThumbnail(folderName, entry, imgWrap) {
   const key = `${folderName}/${entry.name}`;
@@ -965,12 +1193,14 @@ async function fileCurrentDocumentTo(destinationName) {
   try {
     const newHandle = await moveFileHandle(sourceDirHandle, entry.handle, oldName, destDirHandle, newName);
     removeEntryFromViewer(entry, oldName);
-    showUndoToast(`Filed to "${destinationName}"`, async () => {
-      await moveFileHandle(destDirHandle, newHandle, newName, sourceDirHandle, oldName);
-      if (!viewerEl.hidden) await closeViewer();
-      if (sourceDirHandle === currentDirHandle) {
-        await loadFolder(currentDirHandle);
-      }
+    viewerToast.show(`Filed to "${destinationName}"`, {
+      restore: async () => {
+        await moveFileHandle(destDirHandle, newHandle, newName, sourceDirHandle, oldName);
+        if (!viewerEl.hidden) await closeViewer();
+        if (sourceDirHandle === currentDirHandle) {
+          await loadFolder(currentDirHandle);
+        }
+      },
     });
     advanceAfterFiling(index);
   } finally {
@@ -979,41 +1209,52 @@ async function fileCurrentDocumentTo(destinationName) {
   }
 }
 
-// A single "last action" undo slot, good for one step back — filing and
-// page/document deletion both feed it. Each action supplies its own restore
-// closure rather than the toast knowing about every action type, so adding
-// another undoable action later doesn't mean growing a dispatch switch here.
-let undoToastTimer = null;
-let pendingUndoRestore = null;
+// A single "last action" undo slot per toast, good for one step back. Each
+// action supplies its own restore closure rather than the toast knowing
+// about every action type, so adding another undoable action later doesn't
+// mean growing a dispatch switch here. Two instances exist: one scoped to
+// the viewer (filing, page/document deletion) and one for the thumbnail
+// grid (split/join) — they can't share a DOM element since the viewer's
+// toast lives inside #viewer-stage, hidden whenever the grid is showing.
+function createToast(toastEl, textEl, btnEl) {
+  let timer = null;
+  let pendingRestore = null;
 
-function hideUndoToast() {
-  undoToast.hidden = true;
-  if (undoToastTimer) {
-    clearTimeout(undoToastTimer);
-    undoToastTimer = null;
+  function hide() {
+    toastEl.hidden = true;
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    pendingRestore = null;
   }
-  pendingUndoRestore = null;
+
+  function show(message, { restore = null, duration = 5000 } = {}) {
+    pendingRestore = restore;
+    textEl.textContent = message;
+    btnEl.hidden = !restore;
+    toastEl.hidden = false;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(hide, duration);
+  }
+
+  btnEl.addEventListener("click", async () => {
+    if (!pendingRestore) return;
+    const restore = pendingRestore;
+    hide();
+    try {
+      await restore();
+    } catch (err) {
+      console.error("Failed to undo:", err);
+      statusEl.textContent = `⚠️ Couldn't undo: ${err.message || err}`;
+    }
+  });
+
+  return { show, hide };
 }
 
-function showUndoToast(message, restore) {
-  pendingUndoRestore = restore;
-  undoToastText.textContent = message;
-  undoToast.hidden = false;
-  if (undoToastTimer) clearTimeout(undoToastTimer);
-  undoToastTimer = setTimeout(hideUndoToast, 5000);
-}
-
-undoToastBtn.addEventListener("click", async () => {
-  if (!pendingUndoRestore) return;
-  const restore = pendingUndoRestore;
-  hideUndoToast();
-  try {
-    await restore();
-  } catch (err) {
-    console.error("Failed to undo:", err);
-    statusEl.textContent = `⚠️ Couldn't undo: ${err.message || err}`;
-  }
-});
+const viewerToast = createToast(undoToast, undoToastText, undoToastBtn);
+const gridToast = createToast(batchToast, batchToastText, batchToastBtn);
 
 const EXIT_MS = 80;
 const ENTER_MS = 120;
@@ -1147,11 +1388,13 @@ async function performPageDelete(entry, pageNumber) {
   if (wasOnlyPage) {
     await currentDirHandle.removeEntry(oldName);
     removeEntryFromViewer(entry, oldName);
-    showUndoToast(`Deleted "${oldName}"`, async () => {
-      const newHandle = await currentDirHandle.getFileHandle(oldName, { create: true });
-      await restoreFileBytes(newHandle, backupBytes);
-      if (!viewerEl.hidden) await closeViewer();
-      await loadFolder(currentDirHandle);
+    viewerToast.show(`Deleted "${oldName}"`, {
+      restore: async () => {
+        const newHandle = await currentDirHandle.getFileHandle(oldName, { create: true });
+        await restoreFileBytes(newHandle, backupBytes);
+        if (!viewerEl.hidden) await closeViewer();
+        await loadFolder(currentDirHandle);
+      },
     });
     advanceAfterFiling(index);
     return;
@@ -1190,22 +1433,24 @@ async function performPageDelete(entry, pageNumber) {
     console.error(`Failed to refresh thumbnail for ${entry.name}:`, err);
   });
 
-  showUndoToast(`Deleted page ${pageNumber}`, async () => {
-    await restoreFileBytes(entry.handle, backupBytes);
-    entry.file = await entry.handle.getFile();
-    entry.size = entry.file.size;
-    entry.lastModified = entry.file.lastModified;
-    // The restored bytes carry their own original rotations; simplest to
-    // drop the in-session map for this document and let it be re-read from
-    // the file (same as opening a document for the first time) rather than
-    // trying to un-shift it back into place by hand.
-    rotationsByDocument.delete(entry.name);
-    refreshThumbnailFor(entry).catch((err) => {
-      console.error(`Failed to refresh thumbnail for ${entry.name}:`, err);
-    });
-    if (!viewerEl.hidden && viewerState.entries[viewerState.index] === entry) {
-      await openDocumentAt(viewerState.index);
-    }
+  viewerToast.show(`Deleted page ${pageNumber}`, {
+    restore: async () => {
+      await restoreFileBytes(entry.handle, backupBytes);
+      entry.file = await entry.handle.getFile();
+      entry.size = entry.file.size;
+      entry.lastModified = entry.file.lastModified;
+      // The restored bytes carry their own original rotations; simplest to
+      // drop the in-session map for this document and let it be re-read from
+      // the file (same as opening a document for the first time) rather than
+      // trying to un-shift it back into place by hand.
+      rotationsByDocument.delete(entry.name);
+      refreshThumbnailFor(entry).catch((err) => {
+        console.error(`Failed to refresh thumbnail for ${entry.name}:`, err);
+      });
+      if (!viewerEl.hidden && viewerState.entries[viewerState.index] === entry) {
+        await openDocumentAt(viewerState.index);
+      }
+    },
   });
 }
 
@@ -1318,6 +1563,11 @@ async function loadFolder(dirHandle) {
   // this point and there's no reason to keep showing "Reconnect…" while it runs.
   pendingReconnectHandle = null;
   updateFolderButtons();
+  // A stale split/join selection would reference entries this rescan is
+  // about to discard, so drop it rather than let it point at nothing.
+  batchMode = null;
+  batchSelection = [];
+  updateBatchButtons();
 
   statusEl.textContent = `Scanning "${dirHandle.name}"…`;
 

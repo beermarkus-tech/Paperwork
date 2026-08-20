@@ -1,6 +1,6 @@
 # Paperwork
 
-A Progressive Web App for local PDF triage. See the full spec in the project notes; this repo currently implements through the start of **Stage 5** of the development roadmap.
+A Progressive Web App for local PDF triage. See the full spec in the project notes; this repo currently implements through the start of **Stage 6** of the development roadmap.
 
 ## Stage 1 — Foundational File System Access
 
@@ -69,7 +69,7 @@ A bar below the viewer stage, built and wired to a real on-disk rename together 
 - After a successful move, that file disappears from the current session's document stack and thumbnail strip immediately (no folder rescan needed), and the viewer auto-advances to what's now at the same position — letting a stack of scans be filed one after another as: adjust name → tap destination → repeat.
 - A brief "Filed to…" toast with an **Undo** button appears for 5 seconds after each move (see the shared undo mechanism under Stage 5 below). Undo moves the file straight back to its original name and folder; if the viewer is still open it closes back to the (freshly rescanned) thumbnail grid, since the viewer's in-session document list doesn't attempt to splice the restored file back into its old position live.
 
-## Stage 5 — Page Editing & Undo (in progress)
+## Stage 5 — Page Editing & Undo
 
 ### Page deletion
 
@@ -81,13 +81,32 @@ A trash icon floats over the top-right of the page, inside `#viewer-stage` (so i
 
 ### Undo
 
-A single "last action, one step back" mechanism (`showUndoToast`/`pendingUndoRestore` in `app.js`) now backs both filing and page/document deletion, rather than each action having its own bespoke undo:
+A single "last action, one step back" mechanism (`createToast` in `app.js`, a small factory rather than one-off toast code) backs filing, page/document deletion, and — see Stage 6 below — split and join, rather than each action having its own bespoke undo:
 
-- Each undoable action supplies its own restore closure when it shows the toast, so the toast itself doesn't need to know what kind of action it's undoing — filing hands it a closure that moves the file back; page deletion hands it one that rewrites the file's original bytes (captured as a full backup immediately before the destructive write) and reloads the page if it's still open; whole-document deletion hands it one that recreates the file and rescans the folder.
-- The toast is positioned inside `#viewer-stage` (bottom-center, overlaying the PDF) rather than fixed to the viewport — it used to sit at the very bottom of the screen, overlapping the destination buttons and blocking taps there for its full 5-second window; now it floats over content that isn't being interacted with during that window.
-- Performing a second undoable action while a toast is still showing replaces the pending undo — there's no history to step back through, just the one most recent action.
+- Each undoable action supplies its own restore closure when it shows a toast, so the toast itself doesn't need to know what kind of action it's undoing — filing hands it a closure that moves the file back; page deletion hands it one that rewrites the file's original bytes (captured as a full backup immediately before the destructive write) and reloads the page if it's still open; whole-document deletion hands it one that recreates the file and rescans the folder.
+- Two toast instances exist, one per screen, since they're never both visible at once: `viewerToast` lives inside `#viewer-stage` (bottom-center, overlaying the PDF, positioned there rather than fixed to the viewport so it never blocks the destination buttons during its 5-second window) and backs viewer-scoped actions; `gridToast` is fixed to the viewport and backs split/join on the thumbnail grid, which the viewer's toast can't reach since it's hidden whenever the grid is showing.
+- Performing a second undoable action on the same toast while it's still showing replaces the pending undo — there's no history to step back through, just the one most recent action per screen.
 
-Stage 6 (split and join) is next after this.
+## Stage 6 — Split & Join (in progress)
+
+Both live as two buttons next to the "N PDFs found" heading (`#split-btn`, `#join-btn`), each an armed two-tap toggle mirroring the trash icon's pattern: first tap arms selection mode (icon swaps to a checkmark, red background), tapping thumbnails selects them instead of opening the viewer, second tap on the button confirms whatever's selected. Confirming with nothing selected just exits selection mode rather than erroring. The two modes are mutually exclusive — the other button disables itself while one is armed.
+
+### Split
+
+- Tap a PDF to select it (only one at a time — tapping a different one moves the selection rather than adding to it), then tap the split button again to confirm.
+- Splitting a single-page PDF is rejected with a brief info toast (no Undo button, since nothing happened) — but only at confirm time, not the moment you select it, so selecting one doesn't accuse you of a mistake before you've actually tried anything.
+- Each page becomes its own file, `<name> <NN>.pdf`, zero-padded to the page count's digit width (`Invoice 01.pdf` … `Invoice 12.pdf`) so the thumbnail grid's alphabetical sort keeps them in page order — unpadded numbers would put `Invoice 10.pdf` before `Invoice 2.pdf`. If any target name already exists in the folder, the whole split is refused up front rather than partially completing.
+- Implemented as `splitPdfIntoPages` (`pdf-pages.js`): one page per output PDF via pdf-lib's `copyPages`, which carries that page's own already-persisted rotation along with it — nothing extra to handle there. The original file is only removed after every page file has been written successfully; if a write fails partway through, the pages already written are cleaned back up and the original is left untouched.
+
+### Join
+
+- Tap PDFs in the order you want them joined — each gets a numbered badge (1, 2, 3…) showing that order; tapping an already-selected one again deselects it and renumbers the rest to stay contiguous. Tap the join button again (with at least 2 selected) to confirm.
+- The joined file is named after the first-tapped PDF plus a `joined` suffix (`Invoice joined.pdf`), refused up front the same way as split if that name already exists.
+- Implemented as `joinPdfFiles` (`pdf-pages.js`): a fresh `PDFDocument` that copies every page, in order, from each source file in turn — rotations again carry over for free. The joined file is written and verified before any of the originals are removed.
+
+### Shared with page deletion
+
+- Both reuse `gridToast` for a 5-second "Undo" after a successful split or join: undoing a split deletes the new page files and restores the original from a full backup of its bytes taken before the split ran; undoing a join deletes the joined file and recreates every original the same way. Both then rescan the folder (`loadFolder`) rather than trying to splice the grid back to its exact prior state — the same simplification the filing and page-deletion undo already make.
 
 ## Running locally
 
@@ -123,6 +142,7 @@ The setup screen's subtitle shows a version number (`APP_VERSION` in `app.js`), 
 12. Using a file manager (outside Paperwork), create a subfolder inside your inbox that Paperwork has never seen — then open that folder in Paperwork. Open a document and confirm the new subfolder shows up automatically both as a button below the rename bar and in the destinations screen's list (via the pencil button), with no manual adding required.
 13. Open a multi-page document and tap the trash icon once — it should turn red/pulsing without deleting anything. Wait 3+ seconds without tapping again and confirm it reverts on its own; then tap once, swipe to a different page, and confirm it's back to the plain icon (not still armed). Finally tap once and tap again to confirm — the page should actually be gone, the page count should drop by one, and an "Undo" toast should appear over the PDF, above the rename bar. Tap **Undo** and confirm the page comes back exactly as it was (including its rotation, if you'd rotated it). Then open a single-page document, delete its only page, and confirm the whole file disappears from the grid rather than leaving an empty document behind — Undo should bring the file back too.
 14. Open a document. Confirm the chip labels are not visible while the PDF preview is showing, and that the toolbar (close/rotate/page-indicator) and destination buttons are visible. Tap into the filename field to bring up the keyboard — confirm the toolbar and PDF preview both disappear entirely, the chip labels appear, and the filename field/destination buttons shift up into the freed space. Dismiss the keyboard three different ways — tap the checkmark, tap a destination button, and use the phone's back gesture/button — and confirm the toolbar and preview reliably come back and the chips disappear again every time, including via the back gesture (that's the one that used to get stuck).
+15. On the thumbnail grid, tap the scissors button — it should turn into a checkmark. Tap a single-page PDF, then tap the checkmark: confirm you get a quick "only has one page" toast rather than anything actually happening, and that you're still in split mode afterward. Now tap a multi-page PDF and confirm it, and check the folder in a file manager: the original should be gone, replaced by zero-padded numbered files (`Name 01.pdf`, `Name 02.pdf`, …) that sort correctly. Tap **Undo** on the toast and confirm the original comes back and the split files are gone. Then tap the link button, tap three PDFs in a specific order (watch for the 1/2/3 badges — tap one again and confirm it deselects and the remaining badges renumber), and confirm: the joined file appears named after the first one you tapped plus "joined", the three originals are gone, and page order in the result matches your tap order. Tap **Undo** and confirm all three originals reappear and the joined file is gone.
 
 If you've already installed Paperwork to your home screen from an earlier stage and an update doesn't seem to take effect, the installed app (a WebAPK) can get stuck on stale cached files. Uninstalling and reinstalling via "Add to Home screen" is the most reliable fix — more reliable than in-place "Clear cache"/"Clear storage" from Android's App Info screen, which has been inconsistent in testing.
 

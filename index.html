@@ -13,7 +13,7 @@
 <body>
   <header>
     <h1>Paperwork</h1>
-    <p class="subtitle">Stage 5 &mdash; page deletion &amp; undo <span id="app-version"></span></p>
+    <p class="subtitle">Stage 6 &mdash; split &amp; join <span id="app-version"></span></p>
   </header>
 
   <main>
@@ -25,10 +25,21 @@
     </section>
 
     <section id="results" hidden>
-      <h2 id="results-heading">PDFs found</h2>
+      <div id="results-header">
+        <h2 id="results-heading">PDFs found</h2>
+        <div id="batch-actions">
+          <button id="split-btn" type="button" aria-label="Split a PDF into pages">&#9986;&#65039;</button>
+          <button id="join-btn" type="button" aria-label="Join PDFs into one">&#128279;</button>
+        </div>
+      </div>
       <div id="thumbnail-strip"></div>
     </section>
   </main>
+
+  <div id="batch-toast" hidden>
+    <span id="batch-toast-text"></span>
+    <button id="batch-toast-btn" type="button">Undo</button>
+  </div>
 
   <div id="viewer" hidden>
     <div id="viewer-toolbar">

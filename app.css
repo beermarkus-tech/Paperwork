@@ -89,9 +89,36 @@ button:disabled {
   margin-top: 1.5rem;
 }
 
+#results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
 #results h2 {
   font-size: 1rem;
-  margin: 0 0 0.75rem;
+  margin: 0;
+}
+
+#batch-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+
+#split-btn,
+#join-btn {
+  width: auto;
+  padding: 0.4rem 0.7rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+#split-btn.armed,
+#join-btn.armed {
+  background: #b23a3a;
 }
 
 #thumbnail-strip {
@@ -131,6 +158,29 @@ button:disabled {
 
 .thumb-item.selected .thumb-image {
   border-color: var(--navy);
+}
+
+.thumb-item.batch-selected .thumb-image {
+  border-color: var(--navy);
+  box-shadow: 0 0 0 2px var(--navy);
+}
+
+.batch-badge {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  z-index: 2;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--navy);
+  color: var(--paper);
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .thumb-image.thumb-error {
@@ -731,6 +781,47 @@ button:disabled {
 #date-modal-cancel-btn {
   background: rgba(0, 0, 0, 0.08);
   color: #1a1a1a;
+}
+
+/* Batch (split/join) toast — lives on the thumbnail-grid screen, so it's
+   fixed to the viewport rather than positioned inside the viewer like
+   #undo-toast; the two can't share a DOM element since the grid and the
+   viewer are never visible at the same time. */
+#batch-toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(1.25rem, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 300;
+  background: #1a1a1a;
+  color: #fff;
+  border-radius: 0.5rem;
+  padding: 0.7rem 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  max-width: calc(100% - 2rem);
+}
+
+#batch-toast[hidden] {
+  display: none;
+}
+
+#batch-toast-text {
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#batch-toast-btn {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
 }
 
 @media (prefers-color-scheme: dark) {
