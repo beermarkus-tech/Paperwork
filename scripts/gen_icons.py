@@ -1,48 +1,74 @@
-import struct, zlib
+"""Generates icons/icon-192.png, icons/icon-512.png, and
+icons/icon-maskable-512.png: two overlapping dog-eared pages (a "documents
+to triage" glyph) in the app's navy/paper palette. Uses Pillow, supersampled
+4x per target size and downscaled with Lanczos for clean anti-aliased edges.
 
-def make_png(path, size, bg, fg):
-    w = h = size
-    fold = size // 4
-    margin = size // 6
-    px_left = margin
-    px_right = size - margin
-    px_top = margin
-    px_bottom = size - margin
+Re-run after any change: python3 scripts/gen_icons.py
+"""
 
-    rows = []
-    for y in range(h):
-        row = bytearray()
-        row.append(0)  # filter type: none
-        for x in range(w):
-            if px_left <= x < px_right and px_top <= y < px_bottom:
-                # folded corner cut (top-right)
-                if x >= px_right - fold and y < px_top + fold and (x - (px_right - fold)) > (fold - (y - px_top)):
-                    r, g, b = bg
-                else:
-                    r, g, b = fg
-            else:
-                r, g, b = bg
-            row.extend((r, g, b, 255))
-        rows.append(bytes(row))
-    raw = b"".join(rows)
-    compressed = zlib.compress(raw, 9)
+from PIL import Image, ImageDraw
 
-    def chunk(tag, data):
-        return (struct.pack(">I", len(data)) + tag + data +
-                struct.pack(">I", zlib.crc32(tag + data) & 0xffffffff))
+NAVY = (0x1A, 0x2B, 0x4A)
+PAPER = (0xF4, 0xF1, 0xEA)
 
-    sig = b"\x89PNG\r\n\x1a\n"
-    ihdr = struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)
-    with open(path, "wb") as f:
-        f.write(sig)
-        f.write(chunk(b"IHDR", ihdr))
-        f.write(chunk(b"IDAT", compressed))
-        f.write(chunk(b"IEND", b""))
 
-navy = (0x1a, 0x2b, 0x4a)
-paper = (0xf4, 0xf1, 0xea)
+def blend(c1, c2, t):
+    return tuple(round(c1[i] * (1 - t) + c2[i] * t) for i in range(3))
 
-make_png("/home/user/Paperwork/icons/icon-192.png", 192, navy, paper)
-make_png("/home/user/Paperwork/icons/icon-512.png", 512, navy, paper)
-make_png("/home/user/Paperwork/icons/icon-maskable-512.png", 512, navy, paper)
+
+BACK_PAPER = blend(PAPER, NAVY, 0.38)  # shadowed "second sheet" behind the front page
+FLAP = blend(PAPER, NAVY, 0.20)  # folded corner, shaded a bit darker than the page
+
+
+def page_mask(w, h, radius, fold):
+    mask = Image.new("L", (w, h), 0)
+    d = ImageDraw.Draw(mask)
+    d.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, fill=255)
+    if fold:
+        # Cut the dog-ear notch out of the top-right corner.
+        d.polygon([(w - 1 - fold, 0), (w - 1, 0), (w - 1, fold)], fill=0)
+    return mask
+
+
+def draw_page(canvas, x0, y0, w, h, radius, color, fold=0, flap_color=None):
+    mask = page_mask(w, h, radius, fold)
+    canvas.paste(Image.new("RGB", (w, h), color), (x0, y0), mask)
+    if fold:
+        ImageDraw.Draw(canvas).polygon(
+            [
+                (x0 + w - fold, y0),
+                (x0 + w, y0 + fold),
+                (x0 + w - fold, y0 + fold),
+            ],
+            fill=flap_color,
+        )
+
+
+def make_icon(path, canvas_size, content_scale):
+    # content_scale shrinks everything toward the center — used for the
+    # maskable variant so the glyph stays inside the safe-zone circle that
+    # OS icon masks (a circle, squircle, etc.) are guaranteed not to clip.
+    S = canvas_size * 4
+    img = Image.new("RGB", (S, S), NAVY)
+
+    page_w = round(S * 0.34 * content_scale)
+    page_h = round(S * 0.44 * content_scale)
+    radius = round(S * 0.045 * content_scale)
+    fold = round(S * 0.09 * content_scale)
+    offset = round(S * 0.075 * content_scale)
+
+    overall_w = page_w + offset
+    overall_h = page_h + offset
+    ox = (S - overall_w) // 2
+    oy = (S - overall_h) // 2
+
+    draw_page(img, ox + offset, oy + offset, page_w, page_h, radius, BACK_PAPER)
+    draw_page(img, ox, oy, page_w, page_h, radius, PAPER, fold=fold, flap_color=FLAP)
+
+    img.resize((canvas_size, canvas_size), Image.LANCZOS).save(path)
+
+
+make_icon("icons/icon-192.png", 192, content_scale=1.0)
+make_icon("icons/icon-512.png", 512, content_scale=1.0)
+make_icon("icons/icon-maskable-512.png", 512, content_scale=0.72)
 print("done")
