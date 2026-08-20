@@ -16,7 +16,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 36;
+const APP_VERSION = 37;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
@@ -25,6 +25,7 @@ const changeFolderBtn = document.getElementById("change-folder-btn");
 const statusEl = document.getElementById("status");
 const progressEl = document.getElementById("progress");
 const resultsEl = document.getElementById("results");
+const resultsHeading = document.getElementById("results-heading");
 const stripEl = document.getElementById("thumbnail-strip");
 
 const destinationsScreen = document.getElementById("destinations-screen");
@@ -913,7 +914,7 @@ function advanceAfterFiling(index) {
     closeViewer();
     resultsEl.hidden = true;
     if (currentFolderName) {
-      statusEl.textContent = `Found 0 PDFs in "${currentFolderName}".`;
+      statusEl.textContent = `No PDFs found in "${currentFolderName}".`;
     }
     return;
   }
@@ -1321,7 +1322,6 @@ async function loadFolder(dirHandle) {
   statusEl.textContent = `Scanning "${dirHandle.name}"…`;
 
   const entries = await collectPdfEntries(dirHandle);
-  statusEl.textContent = `Found ${entries.length} PDF${entries.length === 1 ? "" : "s"} in "${dirHandle.name}".`;
 
   rotationsByDocument = new Map();
   entryElements.clear();
@@ -1331,7 +1331,9 @@ async function loadFolder(dirHandle) {
   stripEl.innerHTML = "";
   if (entries.length === 0) {
     resultsEl.hidden = true;
+    statusEl.textContent = `No PDFs found in "${dirHandle.name}".`;
   } else {
+    resultsHeading.textContent = `${entries.length} PDF${entries.length === 1 ? "" : "s"} found`;
     const elements = entries.map((entry, index) => {
       const { item, imgWrap } = buildThumbnailItem(entry, () => openViewer(entries, index));
       stripEl.appendChild(item);
@@ -1341,7 +1343,7 @@ async function loadFolder(dirHandle) {
     resultsEl.hidden = false;
 
     await generateThumbnails(dirHandle.name, entries, elements);
-    statusEl.textContent = `Found ${entries.length} PDF${entries.length === 1 ? "" : "s"} in "${dirHandle.name}".`;
+    statusEl.textContent = "";
   }
 }
 
