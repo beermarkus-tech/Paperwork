@@ -16,7 +16,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 41;
+const APP_VERSION = 42;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
@@ -1561,6 +1561,11 @@ async function loadFolder(dirHandle) {
   // this point and there's no reason to keep showing "Reconnect…" while it runs.
   pendingReconnectHandle = null;
   updateFolderButtons();
+  // Access is confirmed and the folder is about to load — the header's
+  // folder icon is the way to change folders from here on, so the large
+  // setup button (only needed to pick or reconnect an inbox in the first
+  // place) has nothing left to do.
+  pickBtn.hidden = true;
   // A stale split/join selection would reference entries this rescan is
   // about to discard, so drop it rather than let it point at nothing.
   batchMode = null;
@@ -1625,6 +1630,7 @@ async function reconnectFolder(handle) {
       statusEl.textContent = `Access to "${handle.name}" wasn't granted. Choose a folder to continue.`;
       pendingReconnectHandle = null;
       updateFolderButtons();
+      pickBtn.hidden = false;
       return;
     }
     await loadFolder(handle);
