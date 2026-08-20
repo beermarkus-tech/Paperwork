@@ -12,13 +12,19 @@
 </head>
 <body>
   <header>
-    <h1>Paperwork</h1>
-    <p class="subtitle">Stage 6 &mdash; split &amp; join <span id="app-version"></span></p>
+    <div id="header-title">
+      <h1>Paperwork</h1>
+      <p class="subtitle">Stage 6 &mdash; split &amp; join <span id="app-version"></span></p>
+    </div>
+    <div id="header-actions">
+      <button id="split-btn" type="button" aria-label="Split a PDF into pages" hidden>&#9986;&#65039;</button>
+      <button id="join-btn" type="button" aria-label="Join PDFs into one" hidden>&#128279;</button>
+      <button id="pick-folder-btn" type="button" aria-label="Choose inbox folder">&#128193;</button>
+    </div>
   </header>
 
   <main>
     <section id="setup">
-      <button id="pick-folder-btn" type="button">Choose inbox folder&hellip;</button>
       <button id="change-folder-btn" type="button" hidden>Choose a different folder&hellip;</button>
       <p id="status" role="status">No folder selected yet.</p>
       <progress id="progress" max="1" value="0" hidden></progress>
@@ -27,10 +33,6 @@
     <section id="results" hidden>
       <div id="results-header">
         <h2 id="results-heading">PDFs found</h2>
-        <div id="batch-actions">
-          <button id="split-btn" type="button" aria-label="Split a PDF into pages">&#9986;&#65039;</button>
-          <button id="join-btn" type="button" aria-label="Join PDFs into one">&#128279;</button>
-        </div>
       </div>
       <div id="thumbnail-strip"></div>
     </section>
