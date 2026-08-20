@@ -94,7 +94,3 @@ export const getStoredDestinations = () => getStoredValue(DESTINATIONS_KEY);
 export const setStoredDestinations = (names) => setStoredValue(DESTINATIONS_KEY, names);
 export const getStoredChipLabels = () => getStoredValue(CHIP_LABELS_KEY);
 export const setStoredChipLabels = (labels) => setStoredValue(CHIP_LABELS_KEY, labels);
-
-const CHIPS_COLLAPSED_KEY = "chipsRowCollapsed";
-export const getChipsRowCollapsed = () => getStoredValue(CHIPS_COLLAPSED_KEY);
-export const setChipsRowCollapsed = (collapsed) => setStoredValue(CHIPS_COLLAPSED_KEY, collapsed);

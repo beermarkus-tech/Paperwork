@@ -244,9 +244,12 @@ button:disabled {
   position: relative;
 }
 
-/* While the filename field has focus (keyboard up), hide the PDF preview
-   so the toolbar, rename field, chips, and destination buttons get to use
-   the space the keyboard would otherwise squeeze them into. */
+/* While the on-screen keyboard is up, hide the PDF preview so the toolbar,
+   rename field, chips, and destination buttons get to use the space the
+   keyboard would otherwise squeeze them into. Destination buttons stay
+   visible either way; the chip labels only make sense while typing, so
+   they swap the other direction — hidden with the preview, shown with the
+   keyboard. */
 #viewer.keyboard-open #viewer-stage {
   display: none;
 }
@@ -369,35 +372,17 @@ button:disabled {
   color: #6fcf97;
 }
 
-#chips-toggle-btn {
-  width: auto;
-  align-self: flex-start;
-  padding: 0.15rem 0;
-  font-size: 0.75rem;
-  background: none;
-  color: rgba(255, 255, 255, 0.6);
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-#chips-toggle-icon {
-  display: inline-block;
-  transition: transform 0.15s ease;
-}
-
-#chips-toggle-btn[aria-expanded="false"] #chips-toggle-icon {
-  transform: rotate(-90deg);
-}
-
-#rename-chips-row[hidden] {
-  display: none;
-}
-
+/* Hidden while the PDF preview is showing — chip labels only make sense
+   while actively editing the filename, so they appear with the keyboard
+   instead of taking up space alongside the preview. */
 #rename-chips-row {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 0.5rem;
+}
+
+#viewer.keyboard-open #rename-chips-row {
+  display: flex;
 }
 
 #rename-chips {

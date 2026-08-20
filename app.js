@@ -7,8 +7,6 @@ import {
   setStoredDestinations,
   getStoredChipLabels,
   setStoredChipLabels,
-  getChipsRowCollapsed,
-  setChipsRowCollapsed,
 } from "./idb.js";
 import { renderFirstPageThumbnail } from "./pdf-thumbnails.js";
 import { loadDocument, renderPageToCanvas } from "./pdf-viewer.js";
@@ -18,7 +16,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 34;
+const APP_VERSION = 35;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
@@ -55,8 +53,6 @@ const deletePageBtn = document.getElementById("delete-page-btn");
 const renameInput = document.getElementById("rename-input");
 const renameDateBtn = document.getElementById("rename-date-btn");
 const renameChipsEl = document.getElementById("rename-chips");
-const renameChipsRow = document.getElementById("rename-chips-row");
-const chipsToggleBtn = document.getElementById("chips-toggle-btn");
 const editChipsBtn = document.getElementById("edit-chips-btn");
 const renameApplyBtn = document.getElementById("rename-apply-btn");
 const renameStatusEl = document.getElementById("rename-status");
@@ -440,15 +436,23 @@ function populateRenameBar(entry) {
 // deferring it a tick lets that happen first, so the selection sticks.
 renameInput.addEventListener("focus", () => {
   setTimeout(() => renameInput.select(), 0);
-  // Hides the PDF preview while the on-screen keyboard is up, so the
-  // toolbar, rename field, chips, and destination buttons get to use the
-  // space the keyboard would otherwise squeeze them into.
-  viewerEl.classList.add("keyboard-open");
 });
 
-renameInput.addEventListener("blur", () => {
-  viewerEl.classList.remove("keyboard-open");
-});
+// Hides the PDF preview (and shows the chip labels in its place) while the
+// on-screen keyboard is actually up. Driven by VisualViewport rather than
+// focus/blur on the filename field: dismissing the keyboard via the
+// system back gesture/button, or the keyboard's own close control, doesn't
+// reliably blur the input on Android — the field can stay logically
+// focused with the keyboard gone, which left the preview stuck hidden.
+// Comparing the visual viewport's height against the layout viewport's
+// reflects the keyboard's real on-screen state regardless of how it closes.
+if (window.visualViewport) {
+  const KEYBOARD_HEIGHT_THRESHOLD = 150;
+  window.visualViewport.addEventListener("resize", () => {
+    const keyboardOpen = window.innerHeight - window.visualViewport.height > KEYBOARD_HEIGHT_THRESHOLD;
+    viewerEl.classList.toggle("keyboard-open", keyboardOpen);
+  });
+}
 
 // --- Custom date picker ---
 // Android Chrome's native <input type="date"> picker only reports a value
@@ -865,29 +869,6 @@ async function addChipLabel() {
     chipsAddBtn.disabled = false;
   }
 }
-
-function setChipsRowExpanded(expanded) {
-  renameChipsRow.hidden = !expanded;
-  chipsToggleBtn.setAttribute("aria-expanded", String(expanded));
-}
-
-chipsToggleBtn.addEventListener("click", () => {
-  const expanded = renameChipsRow.hidden;
-  setChipsRowExpanded(expanded);
-  setChipsRowCollapsed(!expanded).catch((err) => {
-    console.error("Failed to persist chips row collapsed state:", err);
-  });
-});
-
-// Collapsed by default until proven otherwise, since it's new and takes up
-// space some people won't use — persisted, so the choice sticks.
-getChipsRowCollapsed()
-  .then((stored) => {
-    setChipsRowExpanded(!(stored === null ? true : stored));
-  })
-  .catch((err) => {
-    console.error("Failed to read chips row collapsed state:", err);
-  });
 
 editChipsBtn.addEventListener("click", () => {
   renderChipsList();
