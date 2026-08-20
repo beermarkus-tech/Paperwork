@@ -244,6 +244,13 @@ button:disabled {
   position: relative;
 }
 
+/* While the filename field has focus (keyboard up), hide the PDF preview
+   so the toolbar, rename field, chips, and destination buttons get to use
+   the space the keyboard would otherwise squeeze them into. */
+#viewer.keyboard-open #viewer-stage {
+  display: none;
+}
+
 #viewer-canvas {
   max-width: 100%;
   max-height: 100%;

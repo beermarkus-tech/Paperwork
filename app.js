@@ -18,7 +18,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 33;
+const APP_VERSION = 34;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
@@ -322,6 +322,7 @@ async function openDocumentAt(index) {
   flushPendingRotationSave();
   closeDateModal();
   disarmDelete();
+  viewerEl.classList.remove("keyboard-open");
 
   if (viewerState.loadingTask) {
     const oldTask = viewerState.loadingTask;
@@ -362,6 +363,7 @@ async function closeViewer() {
   flushPendingRotationSave();
   closeDateModal();
   disarmDelete();
+  viewerEl.classList.remove("keyboard-open");
   viewerEl.hidden = true;
   if (viewerState.loadingTask) {
     const task = viewerState.loadingTask;
@@ -438,6 +440,14 @@ function populateRenameBar(entry) {
 // deferring it a tick lets that happen first, so the selection sticks.
 renameInput.addEventListener("focus", () => {
   setTimeout(() => renameInput.select(), 0);
+  // Hides the PDF preview while the on-screen keyboard is up, so the
+  // toolbar, rename field, chips, and destination buttons get to use the
+  // space the keyboard would otherwise squeeze them into.
+  viewerEl.classList.add("keyboard-open");
+});
+
+renameInput.addEventListener("blur", () => {
+  viewerEl.classList.remove("keyboard-open");
 });
 
 // --- Custom date picker ---
