@@ -16,7 +16,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 43;
+const APP_VERSION = 44;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· v${APP_VERSION}`;
 
@@ -89,16 +89,24 @@ function formatBytes(bytes) {
   return `${value.toFixed(1)} ${units[unitIndex]}`;
 }
 
+// A single unreadable file (permission hiccup, a file removed by another
+// process mid-scan, etc.) shouldn't take the whole folder listing down with
+// it — skip it and keep going, and let the caller report how many were lost.
 async function collectPdfEntries(dirHandle) {
   const entries = [];
+  let skipped = 0;
   for await (const [name, handle] of dirHandle.entries()) {
-    if (handle.kind === "file" && name.toLowerCase().endsWith(".pdf")) {
+    if (handle.kind !== "file" || !name.toLowerCase().endsWith(".pdf")) continue;
+    try {
       const file = await handle.getFile();
       entries.push({ name, handle, file, size: file.size, lastModified: file.lastModified });
+    } catch (err) {
+      console.error(`Failed to read "${name}", skipping it:`, err);
+      skipped += 1;
     }
   }
   entries.sort((a, b) => a.name.localeCompare(b.name));
-  return entries;
+  return { entries, skipped };
 }
 
 function buildThumbnailItem(entry, onOpen) {
@@ -467,6 +475,14 @@ function resetZoomPan() {
   applyViewerTransform();
 }
 
+// Used when a document fails to open after the canvas already shows some
+// other document's page — without this, a load error pairs a visible error
+// message with what still looks like a valid (but wrong) preview.
+function clearViewerCanvas() {
+  const ctx = viewerCanvas.getContext("2d");
+  ctx.clearRect(0, 0, viewerCanvas.width, viewerCanvas.height);
+}
+
 async function renderCurrentPage() {
   // Undefined (not yet in the map) tells pdf-viewer.js to use the page's own
   // intrinsic rotation; the returned value seeds the map so it reads as an
@@ -539,7 +555,10 @@ async function flushPendingRotationSave() {
   } catch (err) {
     console.error(`Failed to save rotation for ${entry.name}:`, err);
     setSaveStatus(null);
-    statusEl.textContent = `⚠️ Couldn't save rotation for "${entry.name}": ${err.message || err}`;
+    // statusEl sits in the setup section, behind the full-screen viewer —
+    // invisible in exactly the state this error can occur in. renameStatusEl
+    // is the spot viewer-scoped errors (rename, filing) already use instead.
+    setRenameStatus("error", `⚠️ Couldn't save rotation: ${err.message || err}`);
   }
 }
 
@@ -581,6 +600,7 @@ function openViewer(entries, index) {
   openDocumentAt(index).catch((err) => {
     console.error("Failed to open document in viewer:", err);
     viewerIndicator.textContent = `⚠️ ${err.name || "Error"}: ${err.message || err}`;
+    clearViewerCanvas();
   });
 }
 
@@ -1149,6 +1169,8 @@ function advanceAfterFiling(index) {
   const nextIndex = Math.min(index, viewerState.entries.length - 1);
   openDocumentAt(nextIndex).catch((err) => {
     console.error("Failed to open next document after filing:", err);
+    viewerIndicator.textContent = `⚠️ ${err.name || "Error"}: ${err.message || err}`;
+    clearViewerCanvas();
   });
 }
 
@@ -1216,7 +1238,7 @@ async function fileCurrentDocumentTo(destinationName) {
 // the viewer (filing, page/document deletion) and one for the thumbnail
 // grid (split/join) — they can't share a DOM element since the viewer's
 // toast lives inside #viewer-stage, hidden whenever the grid is showing.
-function createToast(toastEl, textEl, btnEl) {
+function createToast(toastEl, textEl, btnEl, reportError) {
   let timer = null;
   let pendingRestore = null;
 
@@ -1246,15 +1268,23 @@ function createToast(toastEl, textEl, btnEl) {
       await restore();
     } catch (err) {
       console.error("Failed to undo:", err);
-      statusEl.textContent = `⚠️ Couldn't undo: ${err.message || err}`;
+      reportError(`⚠️ Couldn't undo: ${err.message || err}`);
     }
   });
 
   return { show, hide };
 }
 
-const viewerToast = createToast(undoToast, undoToastText, undoToastBtn);
-const gridToast = createToast(batchToast, batchToastText, batchToastBtn);
+// viewerToast's undo failures need to land somewhere visible inside the
+// (full-screen) viewer, not statusEl — that's behind it. gridToast only
+// ever shows on the thumbnail grid, where the viewer is closed and statusEl
+// is exactly the right place.
+const viewerToast = createToast(undoToast, undoToastText, undoToastBtn, (message) =>
+  setRenameStatus("error", message),
+);
+const gridToast = createToast(batchToast, batchToastText, batchToastBtn, (message) => {
+  statusEl.textContent = message;
+});
 
 const EXIT_MS = 80;
 const ENTER_MS = 120;
@@ -1295,6 +1325,15 @@ async function animateNavigation(axis, direction, performNavigation) {
     });
     await wait(ENTER_MS);
     viewerCanvas.style.transition = "";
+  } catch (err) {
+    // If performNavigation threw (a corrupt neighboring page/document, a
+    // transient render failure), the canvas was left mid-exit — faded out
+    // and translated off-screen. Put it back rather than leaving what looks
+    // like a frozen viewer, and let the caller still report the error.
+    viewerCanvas.style.transition = "none";
+    viewerCanvas.style.transform = "translate(0px, 0px)";
+    viewerCanvas.style.opacity = "1";
+    throw err;
   } finally {
     isNavigating = false;
   }
@@ -1311,16 +1350,20 @@ function goToPage(delta) {
     resetZoomPan();
     setSaveStatus(null);
     await renderCurrentPage();
-  }).catch((err) => console.error("Failed to render page:", err));
+  }).catch((err) => {
+    console.error("Failed to render page:", err);
+    setRenameStatus("error", `⚠️ ${err.message || err}`);
+  });
 }
 
 function goToDocument(delta) {
   if (isNavigating) return;
   const next = viewerState.index + delta;
   if (next < 0 || next >= viewerState.entries.length) return;
-  animateNavigation("y", delta, () => openDocumentAt(next)).catch((err) =>
-    console.error("Failed to open document:", err),
-  );
+  animateNavigation("y", delta, () => openDocumentAt(next)).catch((err) => {
+    console.error("Failed to open document:", err);
+    setRenameStatus("error", `⚠️ ${err.message || err}`);
+  });
 }
 
 viewerCloseBtn.addEventListener("click", closeViewer);
@@ -1370,7 +1413,9 @@ deletePageBtn.addEventListener("click", () => {
     disarmDelete();
     performPageDelete(entry, pageNumber).catch((err) => {
       console.error("Failed to delete page:", err);
-      statusEl.textContent = `⚠️ Couldn't delete page: ${err.message || err}`;
+      // Same reasoning as the rotation-save error above — statusEl is
+      // hidden behind the viewer, which is always open when this fires.
+      setRenameStatus("error", `⚠️ Couldn't delete page: ${err.message || err}`);
     });
   } else {
     armDelete(entry, pageNumber);
@@ -1574,7 +1619,11 @@ async function loadFolder(dirHandle) {
 
   statusEl.textContent = `Scanning "${dirHandle.name}"…`;
 
-  const entries = await collectPdfEntries(dirHandle);
+  const { entries, skipped } = await collectPdfEntries(dirHandle);
+  const skippedNote =
+    skipped > 0
+      ? ` ⚠️ ${skipped} file${skipped === 1 ? "" : "s"} couldn't be read and ${skipped === 1 ? "was" : "were"} skipped.`
+      : "";
 
   rotationsByDocument = new Map();
   entryElements.clear();
@@ -1586,7 +1635,7 @@ async function loadFolder(dirHandle) {
     resultsEl.hidden = true;
     splitBtn.hidden = true;
     joinBtn.hidden = true;
-    statusEl.textContent = `No PDFs found in "${dirHandle.name}".`;
+    statusEl.textContent = `No PDFs found in "${dirHandle.name}".${skippedNote}`;
   } else {
     resultsHeading.textContent = `${entries.length} PDF${entries.length === 1 ? "" : "s"} found`;
     const elements = entries.map((entry, index) => {
@@ -1600,7 +1649,7 @@ async function loadFolder(dirHandle) {
     joinBtn.hidden = false;
 
     await generateThumbnails(dirHandle.name, entries, elements);
-    statusEl.textContent = "";
+    statusEl.textContent = skippedNote.trim();
   }
 }
 

@@ -22,7 +22,17 @@ function openDb() {
         }
       };
       request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      request.onerror = () => {
+        dbPromise = null;
+        reject(request.error);
+      };
+      // Fires if another tab/window has the same DB open at an older
+      // version, blocking this upgrade — without a handler the request just
+      // sits forever and every caller waiting on openDb() hangs silently.
+      request.onblocked = () => {
+        dbPromise = null;
+        reject(new Error("Database is blocked by another open Paperwork tab — close it and reload."));
+      };
     });
   }
   return dbPromise;

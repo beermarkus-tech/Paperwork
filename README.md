@@ -1,6 +1,6 @@
 # Paperwork
 
-A Progressive Web App for local PDF triage. See the full spec in the project notes; this repo currently implements through **Stage 6** of the development roadmap.
+A Progressive Web App for local PDF triage. See the full spec in the project notes; this repo currently implements through **Stage 6** of the development roadmap, plus the error-handling/edge-case portion of **Stage 7** (batch operations beyond split/join are deferred).
 
 ## Stage 1 — Foundational File System Access
 
@@ -109,6 +109,17 @@ Both live as two icon buttons in the header (`#split-btn`, `#join-btn`), to the 
 ### Shared with page deletion
 
 - Both reuse `gridToast` for a 5-second "Undo" after a successful split or join: undoing a split deletes the new page files and restores the original from a full backup of its bytes taken before the split ran; undoing a join deletes the joined file and recreates every original the same way. Both then rescan the folder (`loadFolder`) rather than trying to splice the grid back to its exact prior state — the same simplification the filing and page-deletion undo already make.
+
+## Stage 7 — Error Handling & Edge Cases (in progress)
+
+The batch-mode-beyond-split/join portion of this stage is deferred; what's landed so far is a pass over places where an error either crashed the scan/viewer outright or failed silently:
+
+- **A single unreadable PDF no longer takes down the whole folder scan.** `collectPdfEntries` used to call `getFile()` on every match with no per-file try/catch, so one file a Storage Access Framework provider couldn't read (permission hiccup, removed mid-scan) aborted the entire listing — nothing loaded, not even the PDFs that were fine. It now skips just that file and keeps going; if anything was skipped, the status line says how many.
+- **Viewer-scoped errors were being written to an element the viewer hides.** Rotation-save failures, page-delete failures, and viewer-side undo failures all set `#status`'s text — but `#status` lives in the setup section, and the viewer is a full-screen overlay (`position: fixed; inset: 0`) sitting on top of it. All three states are only reachable with the viewer open, so the error was always invisible. They now write to `#rename-status` instead, the element viewer errors (rename, filing) already used correctly, since it stays visible in every viewer state including while the keyboard is up.
+- **A failed swipe no longer leaves the page frozen mid-animation with no explanation.** Page/document swipe navigation fades the canvas out, runs the navigation, then fades it back in; if the navigation step itself failed (a corrupt neighboring page or document, a transient render error), the canvas was left faded out and translated off-screen indefinitely, since the code that fades it back in never ran. It now resets the canvas back to visible on any navigation failure and shows the error.
+- **A document that fails to open no longer leaves a stale, different document's page on screen next to the error.** Opening a document (from the grid, or automatically after filing/deleting one) already showed an error message on failure, but the canvas itself kept whatever was last rendered — which could be a completely different document from earlier in the session. The canvas is now cleared alongside the error.
+- **Auto-advancing to the next document after filing or deleting one used to fail silently** (console-only) if that next document couldn't be opened, leaving the UI stuck on "Loading…" with nothing telling the user why. It now shows the same visible error as opening a document normally does.
+- **Opening the IndexedDB database could hang forever** if another open tab running an older schema version blocked the upgrade — there was no `onblocked` handler, so every thumbnail-cache or settings read/write waiting on it would just never resolve. It now rejects with a clear message instead, so it fails the same way any other IndexedDB error already does rather than hanging.
 
 ## Running locally
 
