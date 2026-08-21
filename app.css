@@ -265,32 +265,6 @@ button:disabled {
   white-space: nowrap;
 }
 
-.save-status {
-  flex: 0 0 auto;
-  width: 1.4rem;
-  height: 1.4rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.save-status.saving::before {
-  content: "";
-  width: 1rem;
-  height: 1rem;
-  border-radius: 50%;
-  border: 0.15rem solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
-  animation: save-status-spin 0.8s linear infinite;
-}
-
-.save-status.saved::before {
-  content: "\2713";
-  color: #6fcf97;
-  font-size: 1.3rem;
-  line-height: 1;
-}
-
 @keyframes save-status-spin {
   to {
     transform: rotate(360deg);
@@ -350,11 +324,21 @@ button:disabled {
   right: 0.5rem;
 }
 
-#delete-page-btn {
+/* Rotate and delete grouped into one floating pill over the page itself,
+   rather than rotate living in the top toolbar and delete floating alone —
+   with two pages potentially on screen at once (see the tablet spread
+   media query further down), each page needs to own its own controls so
+   it's never ambiguous which page a tap affects. */
+#page-toolbar {
   position: absolute;
   top: 0.75rem;
   right: 0.75rem;
   z-index: 10;
+  display: flex;
+  gap: 0.5rem;
+}
+
+#page-toolbar button {
   width: auto;
   padding: 0.55rem;
   line-height: 1;
@@ -367,6 +351,36 @@ button:disabled {
 #delete-page-btn.armed {
   background: #b23a3a;
   animation: delete-armed-pulse 1s ease-in-out infinite;
+}
+
+/* Mirrors #rename-apply-btn's own saving/success pattern: the button
+   showing the state is the button the state is about, rather than a
+   separate indicator elsewhere that needs to stay positioned near it. */
+#viewer-rotate-btn {
+  position: relative;
+}
+
+#viewer-rotate-btn.saving {
+  color: transparent;
+}
+
+#viewer-rotate-btn.saving::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1rem;
+  height: 1rem;
+  margin: -0.5rem 0 0 -0.5rem;
+  border-radius: 50%;
+  border: 0.15rem solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  animation: save-status-spin 0.8s linear infinite;
+}
+
+#viewer-rotate-btn.success {
+  background: rgba(111, 207, 151, 0.25);
+  color: #6fcf97;
 }
 
 @keyframes delete-armed-pulse {

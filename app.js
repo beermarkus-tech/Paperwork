@@ -16,7 +16,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 48;
+const APP_VERSION = 49;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· build ${APP_VERSION}`;
 
@@ -53,7 +53,6 @@ const viewerCanvas = document.getElementById("viewer-canvas");
 const viewerIndicator = document.getElementById("viewer-indicator");
 const viewerCloseBtn = document.getElementById("viewer-close-btn");
 const viewerRotateBtn = document.getElementById("viewer-rotate-btn");
-const viewerSaveStatus = document.getElementById("viewer-save-status");
 const pageNavPrev = document.getElementById("page-nav-prev");
 const pageNavNext = document.getElementById("page-nav-next");
 const deletePageBtn = document.getElementById("delete-page-btn");
@@ -538,9 +537,12 @@ const ROTATION_SAVE_DEBOUNCE_MS = 2500;
 let pendingRotationSave = null; // { entry, pageNumber, rotation, timer }
 
 function setSaveStatus(state) {
-  // state: "saving" | "saved" | null
-  viewerSaveStatus.hidden = !state;
-  viewerSaveStatus.className = state ? `save-status ${state}` : "save-status";
+  // state: "saving" | "saved" | null. Shown on the rotate button itself
+  // (spinner while saving, a brief green tint once saved) rather than a
+  // separate indicator elsewhere — same pattern #rename-apply-btn already
+  // uses for its own save state.
+  viewerRotateBtn.classList.toggle("saving", state === "saving");
+  viewerRotateBtn.classList.toggle("success", state === "saved");
 }
 
 function scheduleRotationSave(entry, pageNumber, rotation) {
