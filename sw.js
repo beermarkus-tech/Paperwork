@@ -1,4 +1,4 @@
-const CACHE_NAME = "paperwork-shell-v57";
+const CACHE_NAME = "paperwork-shell-v58";
 const APP_SHELL = [
   "./",
   "./index.html",

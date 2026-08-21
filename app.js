@@ -16,7 +16,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 57;
+const APP_VERSION = 58;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· build ${APP_VERSION}`;
 
@@ -550,12 +550,13 @@ async function renderCurrentPage() {
   const showRight = isSpreadActive() && rightPageNumber <= viewerState.pdf.numPages;
   viewerState.showRightPage = showRight;
   pageSlot2.hidden = !showRight;
-  // Drives the "pages meet in the middle, like a book spread" alignment
-  // (see the #viewer-pages.spread-active rules in app.css) — kept off a
-  // JS-toggled class rather than always-on CSS so single-page mode (mobile
-  // always, tablet portrait too) keeps each page centered in its frame
+  // Drives the "pages meet in the middle, like a book spread" alignment,
+  // the centered-toolbar/centered-chevrons tablet rules, etc. (see the
+  // #viewer-stage.spread-active rules in app.css) — kept off a JS-toggled
+  // class rather than always-on CSS so single-page mode (mobile always,
+  // tablet portrait too) keeps everything centered in its own frame
   // exactly as before.
-  viewerPagesEl.classList.toggle("spread-active", showRight);
+  viewerStageEl.classList.toggle("spread-active", showRight);
 
   const stageWidth = viewerStageEl.clientWidth;
   const stageHeight = viewerStageEl.clientHeight;
@@ -588,7 +589,6 @@ async function renderCurrentPage() {
     ? `Pages ${viewerState.pageNumber}–${rightPageNumber} of ${viewerState.pdf.numPages}`
     : `Page ${viewerState.pageNumber} of ${viewerState.pdf.numPages}`;
   updatePageNavArrows();
-  updatePageNavArrowOffsets();
   updateDeleteArmedIndicators();
 }
 
@@ -597,24 +597,6 @@ function updatePageNavArrows() {
   const lastVisiblePage = viewerState.showRightPage ? viewerState.pageNumber + 1 : viewerState.pageNumber;
   pageNavPrev.hidden = !pdf || viewerState.pageNumber <= 1;
   pageNavNext.hidden = !pdf || lastVisiblePage >= pdf.numPages;
-}
-
-// Tablet only (consumed by the min-width media query in app.css): rests
-// the chevrons against the actual rendered page edges, overlaid on the
-// page, rather than the stage edges — a page rarely fills the full stage
-// width on tablet (letterboxed in single-page mode, pulled toward center
-// in a spread), so a stage-edge chevron can end up sitting in empty space
-// with no visible connection to the page it navigates. Mobile ignores
-// these custom properties entirely and keeps the fixed 0.5rem inset.
-function updatePageNavArrowOffsets() {
-  const CHEVRON_INSET = 8; // px, matches the mobile/base 0.5rem inset
-  const stageRect = viewerStageEl.getBoundingClientRect();
-  const leftCanvasRect = viewerCanvas.getBoundingClientRect();
-  const rightCanvasRect = (viewerState.showRightPage ? viewerCanvas2 : viewerCanvas).getBoundingClientRect();
-  const prevOffset = Math.max(0, leftCanvasRect.left - stageRect.left) + CHEVRON_INSET;
-  const nextOffset = Math.max(0, stageRect.right - rightCanvasRect.right) + CHEVRON_INSET;
-  viewerStageEl.style.setProperty("--page-nav-prev-offset", `${prevOffset}px`);
-  viewerStageEl.style.setProperty("--page-nav-next-offset", `${nextOffset}px`);
 }
 
 // --- Rotation persistence: debounced save + flush-on-navigate ---

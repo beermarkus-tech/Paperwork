@@ -324,17 +324,18 @@ button:disabled {
 }
 
 /* Spread active (see the .spread-active toggle in renderCurrentPage,
-   app.js): pages meet in the middle like a book spread, rather than each
-   sitting centered in its own frame with a gap on both sides — the left
-   page hugs the right edge of its slot, the right page hugs the left edge
-   of its slot. Scoped to this class rather than always-on so single-page
-   mode (mobile always, tablet portrait too) is untouched — #page-slot-1
-   there still centers exactly as before. */
-#viewer-pages.spread-active #page-slot-1 {
+   app.js, set on #viewer-stage so it also scopes the chevron/toolbar
+   rules further down): pages meet in the middle like a book spread,
+   rather than each sitting centered in its own frame with a gap on both
+   sides — the left page hugs the right edge of its slot, the right page
+   hugs the left edge of its slot. Scoped to this class rather than
+   always-on so single-page mode (mobile always, tablet portrait too) is
+   untouched — #page-slot-1 there still centers exactly as before. */
+#viewer-stage.spread-active #page-slot-1 {
   justify-content: flex-end;
 }
 
-#viewer-pages.spread-active #page-slot-2 {
+#viewer-stage.spread-active #page-slot-2 {
   justify-content: flex-start;
 }
 
@@ -352,10 +353,16 @@ button:disabled {
   left: 0.5rem;
   transform: translateY(-50%);
   z-index: 5;
-  font-size: 2rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  font-size: 1.5rem;
   line-height: 1;
-  color: rgba(255, 255, 255, 0.45);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  color: rgba(255, 255, 255, 0.85);
   pointer-events: none;
   user-select: none;
 }
@@ -965,29 +972,33 @@ button:disabled {
     padding-bottom: var(--viewport-bottom-overlap, 0px);
   }
 
-  /* Chevrons rest against the actual page edges (overlaid on the page)
-     instead of the stage edges — --page-nav-*-offset is kept live in
-     app.js from the rendered canvas geometry, since a page rarely fills
-     the full stage width here (letterboxed in single-page mode, pulled
-     toward center in a spread). Falls back to the mobile 0.5rem inset if
-     the property is ever unset. */
-  #page-nav-prev {
-    left: var(--page-nav-prev-offset, 0.5rem);
-  }
-
-  .page-nav-arrow.page-nav-next {
-    right: var(--page-nav-next-offset, 0.5rem);
-  }
-
   /* Single page shown (no spread — tablet portrait, or a trailing odd
-     page with nothing to pair): center the floating toolbar instead of
-     it defaulting to the left slot's "right of its frame" position,
-     which only makes sense once there's a second page to its right.
-     #page-slot-2 stays hidden outside a spread, so this only ever
-     matches #page-slot-1's toolbar in practice. */
-  #viewer-pages:not(.spread-active) .page-toolbar {
+     page with nothing to pair): center the floating toolbar on the
+     page's own frame, rather than it defaulting to the left slot's
+     "right of its frame" position, which only makes sense once there's
+     a second page beside it. The chevrons need no override here — in
+     single-page mode #page-slot-1 always spans the full stage width, so
+     the base rule's fixed inset from the stage edge already reads as
+     "framing the page," same as mobile. #page-slot-2 stays hidden
+     outside a spread, so this only ever matches #page-slot-1's
+     toolbar in practice. */
+  #viewer-stage:not(.spread-active) .page-toolbar {
     right: auto;
     left: 50%;
     transform: translateX(-50%);
+  }
+
+  /* Spread shown: simpler than tracking each page's own rendered edge —
+     the two chevrons just meet at the middle line between the pages,
+     each flush against it, rather than sitting out at the spread's outer
+     edges. */
+  #viewer-stage.spread-active #page-nav-prev {
+    left: auto;
+    right: 50%;
+  }
+
+  #viewer-stage.spread-active .page-nav-arrow.page-nav-next {
+    left: 50%;
+    right: auto;
   }
 }
