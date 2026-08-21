@@ -16,7 +16,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 47;
+const APP_VERSION = 48;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· build ${APP_VERSION}`;
 
@@ -715,6 +715,11 @@ renameInput.addEventListener("focus", () => {
 
 renameInput.addEventListener("blur", () => {
   viewerEl.classList.remove("rename-focused");
+  // Belt-and-suspenders reset: if the browser doesn't fire a visualViewport
+  // event when its autofill bar closes (the same unreliability that made a
+  // focus/blur trigger necessary in the first place), this stops the extra
+  // bottom padding from getting stuck open after the field is left.
+  viewerEl.style.setProperty("--viewport-bottom-overlap", "0px");
 });
 
 // Hides the PDF preview (and shows the chip labels in its place) while the
@@ -727,10 +732,29 @@ renameInput.addEventListener("blur", () => {
 // reflects the keyboard's real on-screen state regardless of how it closes.
 if (window.visualViewport) {
   const KEYBOARD_HEIGHT_THRESHOLD = 150;
-  window.visualViewport.addEventListener("resize", () => {
-    const keyboardOpen = window.innerHeight - window.visualViewport.height > KEYBOARD_HEIGHT_THRESHOLD;
+
+  // Tablet only (consumed by the min-width media query in app.css): how much
+  // of the bottom of the screen is currently covered by keyboard-adjacent
+  // browser chrome — the on-screen keyboard itself, but also things like an
+  // autofill suggestion strip that can stay docked even with the keyboard
+  // hidden (a physical keyboard connected, or the keyboard dismissed while
+  // the field stays focused). Exposed as a custom property rather than a
+  // fixed guess, since that bar's height isn't constant across browsers/
+  // devices. Mobile ignores this entirely — it hides the preview outright
+  // instead (see the max-width:767.98px rule), so nothing needs pushing up.
+  const updateViewportOverlap = () => {
+    const vv = window.visualViewport;
+    const overlap = Math.max(0, Math.round(window.innerHeight - (vv.height + vv.offsetTop)));
+    viewerEl.style.setProperty("--viewport-bottom-overlap", `${overlap}px`);
+
+    const keyboardOpen = window.innerHeight - vv.height > KEYBOARD_HEIGHT_THRESHOLD;
     viewerEl.classList.toggle("keyboard-open", keyboardOpen);
-  });
+  };
+  // "resize" fires for most height changes (keyboard show/hide); "scroll"
+  // catches the case where only the visual viewport's offset moves without
+  // its height changing, which is how some browsers report a bar like this.
+  window.visualViewport.addEventListener("resize", updateViewportOverlap);
+  window.visualViewport.addEventListener("scroll", updateViewportOverlap);
 }
 
 // --- Custom date picker ---

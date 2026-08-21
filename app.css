@@ -916,4 +916,15 @@ button:disabled {
   #viewer.rename-focused #rename-chips-row {
     display: flex;
   }
+
+  /* Pushes the whole column up above any keyboard-adjacent browser chrome
+     an on-screen keyboard leaves behind at the very bottom of the screen —
+     an autofill suggestion bar, most commonly — that visualViewport's own
+     height doesn't always account for. --viewport-bottom-overlap is kept
+     live in app.js from measured viewport geometry, not a guessed constant,
+     and is 0px whenever nothing is covering the screen. box-sizing:border-box
+     (global) keeps this padding-bottom from growing #viewer past inset:0. */
+  #viewer {
+    padding-bottom: var(--viewport-bottom-overlap, 0px);
+  }
 }
