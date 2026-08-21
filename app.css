@@ -990,16 +990,24 @@ button:disabled {
      page with nothing to pair): center the floating toolbar on the
      page's own frame, rather than it defaulting to the left slot's
      "right of its frame" position, which only makes sense once there's
-     a second page beside it. The chevrons need no override here — in
-     single-page mode #page-slot-1 always spans the full stage width, so
-     the base rule's fixed inset from the stage edge already reads as
-     "framing the page," same as mobile. #page-slot-2 stays hidden
-     outside a spread, so this only ever matches #page-slot-1's
-     toolbar in practice. */
+     a second page beside it. #page-slot-2 stays hidden outside a
+     spread, so this only ever matches #page-slot-1's toolbar in
+     practice. A normal two-chevron page (both prev and next have
+     somewhere to go) keeps the base rule's fixed stage-edge inset,
+     same as mobile — only .page-nav-solo (set in updatePageNavArrows,
+     app.js, when this is the only chevron with anywhere to go — an
+     edge of the document) gets centered the same way. */
   #viewer-stage:not(.spread-active) .page-toolbar {
     right: auto;
     left: 50%;
     transform: translateX(-50%);
+  }
+
+  #viewer-stage:not(.spread-active) #page-nav-prev.page-nav-solo,
+  #viewer-stage:not(.spread-active) .page-nav-arrow.page-nav-next.page-nav-solo {
+    left: 50%;
+    right: auto;
+    transform: translate(-50%, -50%);
   }
 
   /* Spread shown: lines each chevron up with the toolbar button nearest

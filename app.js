@@ -16,7 +16,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 60;
+const APP_VERSION = 61;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· build ${APP_VERSION}`;
 
@@ -598,6 +598,17 @@ function updatePageNavArrows() {
   const lastVisiblePage = viewerState.showRightPage ? viewerState.pageNumber + 1 : viewerState.pageNumber;
   pageNavPrev.hidden = !pdf || viewerState.pageNumber <= 1;
   pageNavNext.hidden = !pdf || lastVisiblePage >= pdf.numPages;
+
+  // Tablet, single page shown, only one direction actually has anywhere
+  // to swipe to (an edge of the document — including a trailing lone
+  // page in a spread, since its own "next" is always hidden) — center
+  // that one chevron and let it read as the single available direction,
+  // instead of leaving it pinned out at whichever frame edge it would
+  // otherwise default to. Consumed only inside the tablet media query in
+  // app.css, gated on :not(.spread-active), so this class has no effect
+  // on mobile or on a normal two-chevron spread/tablet-portrait page.
+  pageNavPrev.classList.toggle("page-nav-solo", !pageNavPrev.hidden && pageNavNext.hidden);
+  pageNavNext.classList.toggle("page-nav-solo", !pageNavNext.hidden && pageNavPrev.hidden);
 }
 
 // Spread only (consumed by the #viewer-stage.spread-active rules in
