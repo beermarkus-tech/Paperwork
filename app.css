@@ -380,35 +380,6 @@ button:disabled {
   animation: delete-armed-pulse 1s ease-in-out infinite;
 }
 
-/* Each rotate button shows its own saving state directly (a spinner
-   while in flight) rather than a separate indicator elsewhere. No
-   confirmation tint once saved — the rotation itself is already visible
-   on the page. */
-#viewer-rotate-btn,
-#viewer-rotate-btn-2 {
-  position: relative;
-}
-
-#viewer-rotate-btn.saving,
-#viewer-rotate-btn-2.saving {
-  color: transparent;
-}
-
-#viewer-rotate-btn.saving::before,
-#viewer-rotate-btn-2.saving::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 1rem;
-  height: 1rem;
-  margin: -0.5rem 0 0 -0.5rem;
-  border-radius: 50%;
-  border: 0.15rem solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
-  animation: save-status-spin 0.8s linear infinite;
-}
-
 @keyframes delete-armed-pulse {
   50% {
     background: #d94f4f;

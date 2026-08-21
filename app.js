@@ -16,7 +16,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 51;
+const APP_VERSION = 52;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· build ${APP_VERSION}`;
 
@@ -567,7 +567,6 @@ async function renderCurrentPage() {
     ? `Pages ${viewerState.pageNumber}–${rightPageNumber} of ${viewerState.pdf.numPages}`
     : `Page ${viewerState.pageNumber} of ${viewerState.pdf.numPages}`;
   updatePageNavArrows();
-  updateSaveIndicators();
   updateDeleteArmedIndicators();
 }
 
@@ -580,19 +579,23 @@ function updatePageNavArrows() {
 
 // --- Rotation persistence: debounced save + flush-on-navigate ---
 //
-// A spread can show two independently-rotatable pages at once, so unlike
-// the old single-slot version of this, more than one page's rotation can
-// be mid-save at the same time — rotating the right page must not silently
-// drop a still-pending save for the left one. Keyed by "entry.name::page"
-// (not page number alone, so switching documents can never let one
-// document's pending save collide with another's at the same page number):
+// No visual "saving" state on the rotate button — the rotation itself is
+// already visible the instant you tap, so a spinner for the background
+// write just made it look like the rotation itself was slow (it isn't;
+// this delay is purely to coalesce rapid taps into one write, and swiping
+// away flushes it immediately regardless). The delay and write still
+// happen exactly as before, just silently.
+//
+// A spread can show two independently-rotatable pages at once, so more
+// than one page's rotation can be mid-save at the same time — rotating
+// the right page must not silently drop a still-pending save for the left
+// one. Keyed by "entry.name::page" (not page number alone, so switching
+// documents can never let one document's pending save collide with
+// another's at the same page number):
 // - pendingRotationSaves: scheduled, debounce timer still running.
-// - inFlightRotationSaves: actively being written right now.
-// Each rotate button's spinner is *derived* from whether its own currently-
-// displayed page appears in either set (updateSaveIndicators), recomputed
-// on every relevant change — never toggled once and left to go stale,
-// since the same button element gets reused for whatever page is
-// currently rendered into that slot.
+// - inFlightRotationSaves: actively being written right now — guards
+//   against starting the same write twice if a flush and the debounce
+//   timer both fire for it.
 
 const ROTATION_SAVE_DEBOUNCE_MS = 2500;
 const pendingRotationSaves = new Map(); // key -> { entry, pageNumber, rotation, timer }
@@ -600,21 +603,6 @@ const inFlightRotationSaves = new Set(); // key
 
 function rotationKey(entry, pageNumber) {
   return `${entry.name}::${pageNumber}`;
-}
-
-function isSavingPage(entry, pageNumber) {
-  const key = rotationKey(entry, pageNumber);
-  return pendingRotationSaves.has(key) || inFlightRotationSaves.has(key);
-}
-
-function updateSaveIndicators() {
-  const entry = viewerState.entries[viewerState.index];
-  if (!entry) return;
-  viewerRotateBtn.classList.toggle("saving", isSavingPage(entry, viewerState.pageNumber));
-  viewerRotateBtn2.classList.toggle(
-    "saving",
-    viewerState.showRightPage && isSavingPage(entry, viewerState.pageNumber + 1),
-  );
 }
 
 function scheduleRotationSave(entry, pageNumber, rotation) {
@@ -627,7 +615,6 @@ function scheduleRotationSave(entry, pageNumber, rotation) {
     rotation,
     timer: setTimeout(() => startRotationSave(key), ROTATION_SAVE_DEBOUNCE_MS),
   });
-  updateSaveIndicators();
 }
 
 async function startRotationSave(key) {
@@ -637,7 +624,6 @@ async function startRotationSave(key) {
   pendingRotationSaves.delete(key);
   if (inFlightRotationSaves.has(key)) return; // already writing this page
   inFlightRotationSaves.add(key);
-  updateSaveIndicators();
 
   const { entry, pageNumber, rotation } = pending;
   try {
@@ -656,7 +642,6 @@ async function startRotationSave(key) {
     setRenameStatus("error", `⚠️ Couldn't save rotation: ${err.message || err}`);
   } finally {
     inFlightRotationSaves.delete(key);
-    updateSaveIndicators();
   }
 }
 
@@ -691,7 +676,6 @@ async function openDocumentAt(index) {
   const entry = viewerState.entries[index];
   viewerState.rotationByPage = getRotationMapFor(entry);
   resetZoomPan();
-  updateSaveIndicators();
   populateRenameBar(entry);
 
   viewerIndicator.textContent = "Loading…";
@@ -1561,9 +1545,8 @@ let armedDeleteTimer = null;
 const DELETE_ARM_TIMEOUT_MS = 3000;
 
 // Derives each delete button's armed look from current render state rather
-// than toggling a class once and leaving it — same reasoning as
-// updateSaveIndicators, since these buttons get reused for whatever page
-// number is currently in that slot.
+// than toggling a class once and leaving it, since these buttons get
+// reused for whatever page number is currently in that slot.
 function updateDeleteArmedIndicators() {
   const entry = viewerState.entries[viewerState.index];
   const isArmed = (pageNumber) =>
