@@ -381,6 +381,16 @@ button:disabled {
   background: rgba(0, 0, 0, 0.55);
 }
 
+/* Giving an element its own "display" (the "display: flex" above) makes
+   the browser's native [hidden]-means-display:none behavior lose the
+   cascade — author rules beat the UA stylesheet at equal specificity, so
+   without this, a hidden chevron (no page left in that direction — see
+   updatePageNavArrows, app.js) would still render as a flex box instead
+   of actually disappearing. Same pitfall, same fix, as #page-slot-2. */
+.page-nav-arrow[hidden] {
+  display: none;
+}
+
 .page-nav-arrow.page-nav-next {
   left: auto;
   right: 0.5rem;
