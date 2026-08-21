@@ -16,7 +16,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 52;
+const APP_VERSION = 53;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· build ${APP_VERSION}`;
 
@@ -52,6 +52,7 @@ const viewerStageEl = document.getElementById("viewer-stage");
 const viewerPagesEl = document.getElementById("viewer-pages");
 const viewerCanvas = document.getElementById("viewer-canvas");
 const viewerCanvas2 = document.getElementById("viewer-canvas-2");
+const pageSlot1 = document.getElementById("page-slot-1");
 const pageSlot2 = document.getElementById("page-slot-2");
 const viewerIndicator = document.getElementById("viewer-indicator");
 const viewerCloseBtn = document.getElementById("viewer-close-btn");
@@ -556,6 +557,20 @@ async function renderCurrentPage() {
   // two can never quietly drift apart.
   const gap = showRight ? parseFloat(getComputedStyle(viewerPagesEl).columnGap) || 0 : 0;
   const perPageWidth = showRight ? (stageWidth - gap) / 2 : stageWidth;
+
+  // Each slot gets a fixed, equal-width pixel box — not just a CSS
+  // percentage/flex-shrink guess — so the canvas's own max-width/max-height
+  // (which lets it shrink to fit while keeping its aspect ratio) has a
+  // definite size to resolve against. Without this, a .page-slot with no
+  // explicit size left the percentage chain ambiguous, so a landscape-
+  // oriented page rendered oversized and got cropped top and bottom
+  // instead of being letterboxed to fit. Equal widths also keep the split
+  // between the two pages centered regardless of either page's own aspect
+  // ratio, since neither slot ever grows to fit its content.
+  pageSlot1.style.width = `${perPageWidth}px`;
+  pageSlot1.style.height = `${stageHeight}px`;
+  pageSlot2.style.width = `${perPageWidth}px`;
+  pageSlot2.style.height = `${stageHeight}px`;
 
   const renders = [renderPageIntoCanvas(viewerState.pageNumber, viewerCanvas, perPageWidth * dpr, stageHeight * dpr)];
   if (showRight) {
