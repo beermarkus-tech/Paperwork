@@ -16,7 +16,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 53;
+const APP_VERSION = 54;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· build ${APP_VERSION}`;
 
@@ -550,6 +550,12 @@ async function renderCurrentPage() {
   const showRight = isSpreadActive() && rightPageNumber <= viewerState.pdf.numPages;
   viewerState.showRightPage = showRight;
   pageSlot2.hidden = !showRight;
+  // Drives the "pages meet in the middle, like a book spread" alignment
+  // (see the #viewer-pages.spread-active rules in app.css) — kept off a
+  // JS-toggled class rather than always-on CSS so single-page mode (mobile
+  // always, tablet portrait too) keeps each page centered in its frame
+  // exactly as before.
+  viewerPagesEl.classList.toggle("spread-active", showRight);
 
   const stageWidth = viewerStageEl.clientWidth;
   const stageHeight = viewerStageEl.clientHeight;

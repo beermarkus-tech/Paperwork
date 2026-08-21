@@ -323,6 +323,21 @@ button:disabled {
   display: none;
 }
 
+/* Spread active (see the .spread-active toggle in renderCurrentPage,
+   app.js): pages meet in the middle like a book spread, rather than each
+   sitting centered in its own frame with a gap on both sides — the left
+   page hugs the right edge of its slot, the right page hugs the left edge
+   of its slot. Scoped to this class rather than always-on so single-page
+   mode (mobile always, tablet portrait too) is untouched — #page-slot-1
+   there still centers exactly as before. */
+#viewer-pages.spread-active #page-slot-1 {
+  justify-content: flex-end;
+}
+
+#viewer-pages.spread-active #page-slot-2 {
+  justify-content: flex-start;
+}
+
 #viewer-canvas,
 #viewer-canvas-2 {
   max-width: 100%;
@@ -362,6 +377,17 @@ button:disabled {
   z-index: 10;
   display: flex;
   gap: 0.5rem;
+}
+
+/* Mirrors the page alignment above: the left page's toolbar stays at the
+   right of its frame (unconditionally — this is also the mobile/single-
+   page position, unaffected by spread state), the right page's toolbar
+   sits at the left of its frame instead. #page-slot-2 is only ever
+   visible during a spread, so this needs no spread-active gating of its
+   own. */
+#page-slot-2 .page-toolbar {
+  right: auto;
+  left: 0.75rem;
 }
 
 .page-toolbar button {
