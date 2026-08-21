@@ -16,7 +16,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 54;
+const APP_VERSION = 55;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· build ${APP_VERSION}`;
 
@@ -1962,8 +1962,29 @@ if (!("showDirectoryPicker" in window)) {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch((err) => {
-      console.error("Service worker registration failed:", err);
-    });
+    // updateViaCache: "none" — without this, the browser's *update check*
+    // for sw.js itself is still subject to ordinary HTTP caching (the spec
+    // only exempts scripts sw.js imports, not sw.js itself). GitHub Pages
+    // gives no way to set our own Cache-Control header, so a cached sw.js
+    // response could make the browser conclude nothing changed even when
+    // a new build is live — sw.js's own skipWaiting()/clients.claim()
+    // never even get a chance to run. This forces every update check to
+    // hit the network for real.
+    navigator.serviceWorker
+      .register("./sw.js", { updateViaCache: "none" })
+      .then((registration) => {
+        // Registration alone only checks for updates on navigation to a
+        // page in scope. An installed PWA resumed from the background
+        // doesn't always count as a fresh navigation, so also check
+        // explicitly right away and every time the app becomes visible
+        // again — cheap and safe to call even when nothing's changed.
+        registration.update();
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") registration.update();
+        });
+      })
+      .catch((err) => {
+        console.error("Service worker registration failed:", err);
+      });
   });
 }
