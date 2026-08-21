@@ -353,9 +353,9 @@ button:disabled {
   animation: delete-armed-pulse 1s ease-in-out infinite;
 }
 
-/* Mirrors #rename-apply-btn's own saving/success pattern: the button
-   showing the state is the button the state is about, rather than a
-   separate indicator elsewhere that needs to stay positioned near it. */
+/* The rotate button shows its own saving state directly (a spinner while
+   in flight) rather than a separate indicator elsewhere. No confirmation
+   tint once saved — the rotation itself is already visible on the page. */
 #viewer-rotate-btn {
   position: relative;
 }
@@ -376,11 +376,6 @@ button:disabled {
   border: 0.15rem solid rgba(255, 255, 255, 0.3);
   border-top-color: #fff;
   animation: save-status-spin 0.8s linear infinite;
-}
-
-#viewer-rotate-btn.success {
-  background: rgba(111, 207, 151, 0.25);
-  color: #6fcf97;
 }
 
 @keyframes delete-armed-pulse {
