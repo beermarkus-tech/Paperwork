@@ -16,7 +16,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 59;
+const APP_VERSION = 60;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· build ${APP_VERSION}`;
 
@@ -608,11 +608,26 @@ function updatePageNavArrows() {
 // position the way the page-edge alignment briefly did before being
 // simplified away — the difference is this targets two specific,
 // unchanging elements instead of remeasuring arbitrary page content.
+//
+// This runs mid-navigation (renderCurrentPage is called from inside
+// animateNavigation's slide animation), where #viewer-pages can still
+// have its exit/enter transition active even though resetZoomPan() just
+// set its transform back to rest — the transition property itself isn't
+// cleared until after this function returns, so the browser would
+// animate toward that reset value instead of snapping to it, and
+// getBoundingClientRect() would capture the buttons mid-slide rather
+// than at their true resting position. Suspending the transition just
+// long enough to force that snap, then restoring it exactly as it was,
+// keeps this correct regardless of when it's called.
 function updatePageNavArrowAlignment() {
   if (!viewerState.showRightPage) return;
+  const previousTransition = viewerPagesEl.style.transition;
+  viewerPagesEl.style.transition = "none";
+  void viewerPagesEl.offsetWidth; // force the transform to apply with no transition
   const stageRect = viewerStageEl.getBoundingClientRect();
   const prevTargetRect = deletePageBtn.getBoundingClientRect();
   const nextTargetRect = viewerRotateBtn2.getBoundingClientRect();
+  viewerPagesEl.style.transition = previousTransition;
   const prevCenter = prevTargetRect.left + prevTargetRect.width / 2 - stageRect.left;
   const nextCenter = nextTargetRect.left + nextTargetRect.width / 2 - stageRect.left;
   viewerStageEl.style.setProperty("--page-nav-prev-center", `${prevCenter}px`);
