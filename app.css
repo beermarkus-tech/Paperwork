@@ -347,6 +347,14 @@ button:disabled {
   touch-action: none;
 }
 
+/* Real <button>s now (see index.html) rather than decorative spans, so
+   they double as tap targets alongside swipe — the stage's own pointerdown
+   handler already excludes any real button from swipe/pinch tracking
+   (see the e.target.closest("button") guard in app.js), the same way the
+   delete-page button already works, so no extra wiring was needed for
+   taps to reach them. Overrides the global button rule's padding/width/
+   border-radius rather than relying on it, since a plain rounded
+   rectangle button is not what's wanted here. */
 .page-nav-arrow {
   position: absolute;
   top: 50%;
@@ -355,6 +363,8 @@ button:disabled {
   z-index: 5;
   width: 2.25rem;
   height: 2.25rem;
+  padding: 0;
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -363,8 +373,12 @@ button:disabled {
   font-size: 1.5rem;
   line-height: 1;
   color: rgba(255, 255, 255, 0.85);
-  pointer-events: none;
+  cursor: pointer;
   user-select: none;
+}
+
+.page-nav-arrow:active {
+  background: rgba(0, 0, 0, 0.55);
 }
 
 .page-nav-arrow.page-nav-next {
@@ -988,17 +1002,23 @@ button:disabled {
     transform: translateX(-50%);
   }
 
-  /* Spread shown: simpler than tracking each page's own rendered edge —
-     the two chevrons just meet at the middle line between the pages,
-     each flush against it, rather than sitting out at the spread's outer
-     edges. */
+  /* Spread shown: lines each chevron up with the toolbar button nearest
+     the gutter on its side — the left page's trash button (rightmost in
+     its own toolbar, so the closest one to center) for the prev chevron,
+     the right page's rotate button (leftmost in its toolbar) for the
+     next chevron — rather than the spread's outer edges or the bare
+     middle line. --page-nav-prev-center/--page-nav-next-center are kept
+     live in app.js from those two buttons' actual rendered positions,
+     since button width isn't a fixed, safely-hardcodable value. */
   #viewer-stage.spread-active #page-nav-prev {
-    left: auto;
-    right: 50%;
+    left: var(--page-nav-prev-center);
+    right: auto;
+    transform: translate(-50%, -50%);
   }
 
   #viewer-stage.spread-active .page-nav-arrow.page-nav-next {
-    left: 50%;
+    left: var(--page-nav-next-center);
     right: auto;
+    transform: translate(-50%, -50%);
   }
 }

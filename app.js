@@ -16,7 +16,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 58;
+const APP_VERSION = 59;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· build ${APP_VERSION}`;
 
@@ -589,6 +589,7 @@ async function renderCurrentPage() {
     ? `Pages ${viewerState.pageNumber}–${rightPageNumber} of ${viewerState.pdf.numPages}`
     : `Page ${viewerState.pageNumber} of ${viewerState.pdf.numPages}`;
   updatePageNavArrows();
+  updatePageNavArrowAlignment();
   updateDeleteArmedIndicators();
 }
 
@@ -597,6 +598,25 @@ function updatePageNavArrows() {
   const lastVisiblePage = viewerState.showRightPage ? viewerState.pageNumber + 1 : viewerState.pageNumber;
   pageNavPrev.hidden = !pdf || viewerState.pageNumber <= 1;
   pageNavNext.hidden = !pdf || lastVisiblePage >= pdf.numPages;
+}
+
+// Spread only (consumed by the #viewer-stage.spread-active rules in
+// app.css): lines each chevron up with the toolbar button nearest the
+// gutter on its side. Button width isn't a value worth hardcoding (it's
+// derived from padding/font-size, not a fixed px number), so this
+// measures the actual rendered buttons rather than guessing at their
+// position the way the page-edge alignment briefly did before being
+// simplified away — the difference is this targets two specific,
+// unchanging elements instead of remeasuring arbitrary page content.
+function updatePageNavArrowAlignment() {
+  if (!viewerState.showRightPage) return;
+  const stageRect = viewerStageEl.getBoundingClientRect();
+  const prevTargetRect = deletePageBtn.getBoundingClientRect();
+  const nextTargetRect = viewerRotateBtn2.getBoundingClientRect();
+  const prevCenter = prevTargetRect.left + prevTargetRect.width / 2 - stageRect.left;
+  const nextCenter = nextTargetRect.left + nextTargetRect.width / 2 - stageRect.left;
+  viewerStageEl.style.setProperty("--page-nav-prev-center", `${prevCenter}px`);
+  viewerStageEl.style.setProperty("--page-nav-next-center", `${nextCenter}px`);
 }
 
 // --- Rotation persistence: debounced save + flush-on-navigate ---
@@ -1535,6 +1555,9 @@ function goToDocument(delta) {
 }
 
 viewerCloseBtn.addEventListener("click", closeViewer);
+
+pageNavPrev.addEventListener("click", () => goToPage(-1));
+pageNavNext.addEventListener("click", () => goToPage(1));
 
 // Both slots' rotate buttons funnel into this, parameterized by which page
 // number that slot currently shows — the left slot is always
