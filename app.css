@@ -169,6 +169,14 @@ button:disabled {
   box-shadow: 0 0 0 2px var(--navy);
 }
 
+.thumb-item.batch-selected .thumb-image::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgba(26, 43, 74, 0.35);
+}
+
 .batch-badge {
   position: absolute;
   top: 0.35rem;
@@ -303,10 +311,15 @@ button:disabled {
    the keyboard would otherwise squeeze them into. Destination buttons stay
    visible either way; the chip labels only make sense while typing, so
    they swap the other direction — hidden with the preview, shown with the
-   keyboard. */
-#viewer.keyboard-open #viewer-toolbar,
-#viewer.keyboard-open #viewer-stage {
-  display: none;
+   keyboard. Phone-only: the screen is tight enough there that the preview
+   has to give up its space entirely. On tablet (see the min-width media
+   query near the end of this file) there's room to keep the preview
+   visible and just grow the rename area upward instead. */
+@media (max-width: 767.98px) {
+  #viewer.keyboard-open #viewer-toolbar,
+  #viewer.keyboard-open #viewer-stage {
+    display: none;
+  }
 }
 
 #viewer-canvas {
@@ -880,5 +893,27 @@ button:disabled {
   #date-modal-cancel-btn {
     background: rgba(255, 255, 255, 0.12);
     color: #eee;
+  }
+}
+
+/* Tablet (768px and up). Everything below only ever applies at this width
+   or wider — phones never match it, so nothing here changes the mobile
+   layout or behavior. */
+@media (min-width: 768px) {
+  main {
+    max-width: 1600px;
+  }
+
+  #thumbnail-strip {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  /* Rename field focused (see the "focus"/"blur" listeners in app.js):
+     reveal the chip row without hiding the preview — #rename-bar and
+     #viewer-stage are flex siblings in a flex column, so #viewer-stage
+     just gives up the space #rename-chips-row now takes, no extra layout
+     work needed. */
+  #viewer.rename-focused #rename-chips-row {
+    display: flex;
   }
 }

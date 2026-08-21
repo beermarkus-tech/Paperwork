@@ -16,12 +16,13 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 46;
+const APP_VERSION = 47;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· build ${APP_VERSION}`;
 
 const pickBtn = document.getElementById("pick-folder-btn");
 const changeFolderBtn = document.getElementById("change-folder-btn");
+const batchCancelBtn = document.getElementById("batch-cancel-btn");
 const statusEl = document.getElementById("status");
 const progressEl = document.getElementById("progress");
 const resultsEl = document.getElementById("results");
@@ -109,6 +110,17 @@ async function collectPdfEntries(dirHandle) {
   return { entries, skipped };
 }
 
+function formatThumbMeta(entry) {
+  const sizeText = formatBytes(entry.size);
+  if (entry.pageCount == null) return sizeText;
+  return `${entry.pageCount} page${entry.pageCount === 1 ? "" : "s"} · ${sizeText}`;
+}
+
+function updateThumbMeta(imgWrap, entry) {
+  const sizeEl = imgWrap.parentElement && imgWrap.parentElement.querySelector(".thumb-size");
+  if (sizeEl) sizeEl.textContent = formatThumbMeta(entry);
+}
+
 function buildThumbnailItem(entry, onOpen) {
   const item = document.createElement("div");
   item.className = "thumb-item";
@@ -124,7 +136,7 @@ function buildThumbnailItem(entry, onOpen) {
 
   const size = document.createElement("div");
   size.className = "thumb-size";
-  size.textContent = formatBytes(entry.size);
+  size.textContent = formatThumbMeta(entry);
   item.appendChild(size);
 
   item.addEventListener("click", () => {
@@ -173,7 +185,12 @@ function updateBatchButtons() {
   joinBtn.textContent = batchMode === "join" ? "✓" : "🔗";
   joinBtn.classList.toggle("armed", batchMode === "join");
   joinBtn.disabled = batchMode === "split";
+  batchCancelBtn.hidden = !batchMode;
 }
+
+batchCancelBtn.addEventListener("click", () => {
+  exitBatchMode();
+});
 
 function renderBatchSelection() {
   for (const { item, imgWrap } of entryElements.values()) {
@@ -381,6 +398,7 @@ async function renderAndCacheThumbnail(folderName, entry, imgWrap) {
   try {
     const { blob, pageCount } = await renderFirstPageThumbnail(entry.file);
     entry.pageCount = pageCount;
+    updateThumbMeta(imgWrap, entry);
     imgWrap.classList.remove("thumb-error");
     setThumbnailImage(imgWrap, blob);
     await putCachedThumbnail({
@@ -424,6 +442,7 @@ async function generateThumbnails(folderName, entries, elements) {
 
     if (isFresh) {
       entry.pageCount = cached.pageCount;
+      updateThumbMeta(imgWrap, entry);
       setThumbnailImage(imgWrap, cached.thumbnail);
     } else {
       await renderAndCacheThumbnail(folderName, entry, imgWrap);
@@ -567,6 +586,7 @@ async function openDocumentAt(index) {
   closeDateModal();
   disarmDelete();
   viewerEl.classList.remove("keyboard-open");
+  viewerEl.classList.remove("rename-focused");
 
   if (viewerState.loadingTask) {
     const oldTask = viewerState.loadingTask;
@@ -609,6 +629,7 @@ async function closeViewer() {
   closeDateModal();
   disarmDelete();
   viewerEl.classList.remove("keyboard-open");
+  viewerEl.classList.remove("rename-focused");
   viewerEl.hidden = true;
   if (viewerState.loadingTask) {
     const task = viewerState.loadingTask;
@@ -685,6 +706,15 @@ function populateRenameBar(entry) {
 // deferring it a tick lets that happen first, so the selection sticks.
 renameInput.addEventListener("focus", () => {
   setTimeout(() => renameInput.select(), 0);
+  // Tablet-only trigger (see the min-width media query in app.css): the
+  // phone's keyboard-open class comes from visualViewport shrinking, which
+  // a tablet's on-screen keyboard doesn't reliably do and a physical
+  // keyboard never does. This class has no effect below that breakpoint.
+  viewerEl.classList.add("rename-focused");
+});
+
+renameInput.addEventListener("blur", () => {
+  viewerEl.classList.remove("rename-focused");
 });
 
 // Hides the PDF preview (and shows the chip labels in its place) while the
