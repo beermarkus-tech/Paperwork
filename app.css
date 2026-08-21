@@ -964,4 +964,30 @@ button:disabled {
   #viewer {
     padding-bottom: var(--viewport-bottom-overlap, 0px);
   }
+
+  /* Chevrons rest against the actual page edges (overlaid on the page)
+     instead of the stage edges — --page-nav-*-offset is kept live in
+     app.js from the rendered canvas geometry, since a page rarely fills
+     the full stage width here (letterboxed in single-page mode, pulled
+     toward center in a spread). Falls back to the mobile 0.5rem inset if
+     the property is ever unset. */
+  #page-nav-prev {
+    left: var(--page-nav-prev-offset, 0.5rem);
+  }
+
+  .page-nav-arrow.page-nav-next {
+    right: var(--page-nav-next-offset, 0.5rem);
+  }
+
+  /* Single page shown (no spread — tablet portrait, or a trailing odd
+     page with nothing to pair): center the floating toolbar instead of
+     it defaulting to the left slot's "right of its frame" position,
+     which only makes sense once there's a second page to its right.
+     #page-slot-2 stays hidden outside a spread, so this only ever
+     matches #page-slot-1's toolbar in practice. */
+  #viewer-pages:not(.spread-active) .page-toolbar {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
 }
