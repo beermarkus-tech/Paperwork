@@ -51,12 +51,23 @@
     </div>
     <div id="viewer-stage">
       <span id="page-nav-prev" class="page-nav-arrow" aria-hidden="true" hidden>&#8249;</span>
-      <canvas id="viewer-canvas"></canvas>
-      <span id="page-nav-next" class="page-nav-arrow page-nav-next" aria-hidden="true" hidden>&#8250;</span>
-      <div id="page-toolbar">
-        <button id="viewer-rotate-btn" type="button" aria-label="Rotate page">&#8635;</button>
-        <button id="delete-page-btn" type="button" aria-label="Delete page">&#128465;&#65039;</button>
+      <div id="viewer-pages">
+        <div class="page-slot">
+          <canvas id="viewer-canvas"></canvas>
+          <div class="page-toolbar">
+            <button id="viewer-rotate-btn" type="button" aria-label="Rotate page">&#8635;</button>
+            <button id="delete-page-btn" type="button" aria-label="Delete page">&#128465;&#65039;</button>
+          </div>
+        </div>
+        <div class="page-slot" id="page-slot-2" hidden>
+          <canvas id="viewer-canvas-2"></canvas>
+          <div class="page-toolbar">
+            <button id="viewer-rotate-btn-2" type="button" aria-label="Rotate page">&#8635;</button>
+            <button id="delete-page-btn-2" type="button" aria-label="Delete page">&#128465;&#65039;</button>
+          </div>
+        </div>
       </div>
+      <span id="page-nav-next" class="page-nav-arrow page-nav-next" aria-hidden="true" hidden>&#8250;</span>
       <div id="undo-toast" hidden>
         <span id="undo-toast-text"></span>
         <button id="undo-toast-btn" type="button">Undo</button>

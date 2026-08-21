@@ -16,7 +16,7 @@ import { renameFileHandle, moveFileHandle, fileExistsInDir } from "./file-ops.js
 
 // Bumped by hand alongside sw.js's CACHE_NAME on every deploy, so the
 // number on screen always identifies exactly which build is running.
-const APP_VERSION = 50;
+const APP_VERSION = 51;
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `· build ${APP_VERSION}`;
 
@@ -49,13 +49,18 @@ const undoToastBtn = document.getElementById("undo-toast-btn");
 
 const viewerEl = document.getElementById("viewer");
 const viewerStageEl = document.getElementById("viewer-stage");
+const viewerPagesEl = document.getElementById("viewer-pages");
 const viewerCanvas = document.getElementById("viewer-canvas");
+const viewerCanvas2 = document.getElementById("viewer-canvas-2");
+const pageSlot2 = document.getElementById("page-slot-2");
 const viewerIndicator = document.getElementById("viewer-indicator");
 const viewerCloseBtn = document.getElementById("viewer-close-btn");
 const viewerRotateBtn = document.getElementById("viewer-rotate-btn");
+const viewerRotateBtn2 = document.getElementById("viewer-rotate-btn-2");
 const pageNavPrev = document.getElementById("page-nav-prev");
 const pageNavNext = document.getElementById("page-nav-next");
 const deletePageBtn = document.getElementById("delete-page-btn");
+const deletePageBtn2 = document.getElementById("delete-page-btn-2");
 const renameInput = document.getElementById("rename-input");
 const renameDateBtn = document.getElementById("rename-date-btn");
 const renameChipsEl = document.getElementById("rename-chips");
@@ -461,6 +466,7 @@ const viewerState = {
   pdf: null,
   loadingTask: null,
   pageNumber: 1,
+  showRightPage: false,
   rotationByPage: new Map(),
   zoom: 1,
   panX: 0,
@@ -482,8 +488,24 @@ function getRotationMapFor(entry) {
   return map;
 }
 
+// Tablet landscape only: gated on the screen's short axis (which stays
+// small for a phone in any orientation), not just width — a wide phone
+// held sideways is not what "tablet" means here, and must keep the
+// single-page layout exactly as before. In landscape, "height" is that
+// short axis. This is the one and only place this is decided; render/
+// navigation/pan-zoom all key off it so nothing else can drift out of
+// sync with it.
+const spreadQuery = window.matchMedia("(orientation: landscape) and (min-height: 700px)");
+
+function isSpreadActive() {
+  return spreadQuery.matches;
+}
+
+// Targets #viewer-pages (the wrapper around one or two .page-slot
+// elements), not the canvas directly, so a spread's two pages always
+// pan/zoom together as a single unit.
 function applyViewerTransform() {
-  viewerCanvas.style.transform = `translate(${viewerState.panX}px, ${viewerState.panY}px) scale(${viewerState.zoom})`;
+  viewerPagesEl.style.transform = `translate(${viewerState.panX}px, ${viewerState.panY}px) scale(${viewerState.zoom})`;
 }
 
 function resetZoomPan() {
@@ -497,94 +519,156 @@ function resetZoomPan() {
 // other document's page — without this, a load error pairs a visible error
 // message with what still looks like a valid (but wrong) preview.
 function clearViewerCanvas() {
-  const ctx = viewerCanvas.getContext("2d");
-  ctx.clearRect(0, 0, viewerCanvas.width, viewerCanvas.height);
+  for (const canvas of [viewerCanvas, viewerCanvas2]) {
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  pageSlot2.hidden = true;
 }
 
-async function renderCurrentPage() {
+async function renderPageIntoCanvas(pageNumber, canvas, maxWidth, maxHeight) {
   // Undefined (not yet in the map) tells pdf-viewer.js to use the page's own
   // intrinsic rotation; the returned value seeds the map so it reads as an
   // absolute rotation from here on, correctly starting from what's already
   // on disk rather than always assuming 0.
-  const requestedRotation = viewerState.rotationByPage.get(viewerState.pageNumber);
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const maxWidth = viewerStageEl.clientWidth * dpr;
-  const maxHeight = viewerStageEl.clientHeight * dpr;
-
+  const requestedRotation = viewerState.rotationByPage.get(pageNumber);
   const appliedRotation = await renderPageToCanvas(
     viewerState.pdf,
-    viewerState.pageNumber,
+    pageNumber,
     requestedRotation,
-    viewerCanvas,
+    canvas,
     maxWidth,
     maxHeight,
   );
-  viewerState.rotationByPage.set(viewerState.pageNumber, appliedRotation);
+  viewerState.rotationByPage.set(pageNumber, appliedRotation);
+}
 
-  viewerIndicator.textContent = `Page ${viewerState.pageNumber} of ${viewerState.pdf.numPages}`;
+async function renderCurrentPage() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const rightPageNumber = viewerState.pageNumber + 1;
+  const showRight = isSpreadActive() && rightPageNumber <= viewerState.pdf.numPages;
+  viewerState.showRightPage = showRight;
+  pageSlot2.hidden = !showRight;
+
+  const stageWidth = viewerStageEl.clientWidth;
+  const stageHeight = viewerStageEl.clientHeight;
+  // Read the actual CSS gap rather than duplicating its value here, so the
+  // two can never quietly drift apart.
+  const gap = showRight ? parseFloat(getComputedStyle(viewerPagesEl).columnGap) || 0 : 0;
+  const perPageWidth = showRight ? (stageWidth - gap) / 2 : stageWidth;
+
+  const renders = [renderPageIntoCanvas(viewerState.pageNumber, viewerCanvas, perPageWidth * dpr, stageHeight * dpr)];
+  if (showRight) {
+    renders.push(renderPageIntoCanvas(rightPageNumber, viewerCanvas2, perPageWidth * dpr, stageHeight * dpr));
+  }
+  await Promise.all(renders);
+
+  viewerIndicator.textContent = showRight
+    ? `Pages ${viewerState.pageNumber}–${rightPageNumber} of ${viewerState.pdf.numPages}`
+    : `Page ${viewerState.pageNumber} of ${viewerState.pdf.numPages}`;
   updatePageNavArrows();
+  updateSaveIndicators();
+  updateDeleteArmedIndicators();
 }
 
 function updatePageNavArrows() {
   const pdf = viewerState.pdf;
+  const lastVisiblePage = viewerState.showRightPage ? viewerState.pageNumber + 1 : viewerState.pageNumber;
   pageNavPrev.hidden = !pdf || viewerState.pageNumber <= 1;
-  pageNavNext.hidden = !pdf || viewerState.pageNumber >= pdf.numPages;
+  pageNavNext.hidden = !pdf || lastVisiblePage >= pdf.numPages;
 }
 
 // --- Rotation persistence: debounced save + flush-on-navigate ---
+//
+// A spread can show two independently-rotatable pages at once, so unlike
+// the old single-slot version of this, more than one page's rotation can
+// be mid-save at the same time — rotating the right page must not silently
+// drop a still-pending save for the left one. Keyed by "entry.name::page"
+// (not page number alone, so switching documents can never let one
+// document's pending save collide with another's at the same page number):
+// - pendingRotationSaves: scheduled, debounce timer still running.
+// - inFlightRotationSaves: actively being written right now.
+// Each rotate button's spinner is *derived* from whether its own currently-
+// displayed page appears in either set (updateSaveIndicators), recomputed
+// on every relevant change — never toggled once and left to go stale,
+// since the same button element gets reused for whatever page is
+// currently rendered into that slot.
 
 const ROTATION_SAVE_DEBOUNCE_MS = 2500;
-let pendingRotationSave = null; // { entry, pageNumber, rotation, timer }
+const pendingRotationSaves = new Map(); // key -> { entry, pageNumber, rotation, timer }
+const inFlightRotationSaves = new Set(); // key
 
-function setSaveStatus(state) {
-  // state: "saving" | "saved" | null. Only "saving" has any visible effect
-  // (a spinner on the rotate button itself) — "saved" doesn't get its own
-  // confirmation tint, since the rotation itself is already visible on the
-  // page the moment it applies. Still called with "saved" so a save that
-  // finished clears the spinner.
-  viewerRotateBtn.classList.toggle("saving", state === "saving");
+function rotationKey(entry, pageNumber) {
+  return `${entry.name}::${pageNumber}`;
+}
+
+function isSavingPage(entry, pageNumber) {
+  const key = rotationKey(entry, pageNumber);
+  return pendingRotationSaves.has(key) || inFlightRotationSaves.has(key);
+}
+
+function updateSaveIndicators() {
+  const entry = viewerState.entries[viewerState.index];
+  if (!entry) return;
+  viewerRotateBtn.classList.toggle("saving", isSavingPage(entry, viewerState.pageNumber));
+  viewerRotateBtn2.classList.toggle(
+    "saving",
+    viewerState.showRightPage && isSavingPage(entry, viewerState.pageNumber + 1),
+  );
 }
 
 function scheduleRotationSave(entry, pageNumber, rotation) {
-  if (pendingRotationSave && pendingRotationSave.timer) {
-    clearTimeout(pendingRotationSave.timer);
-  }
-  pendingRotationSave = {
+  const key = rotationKey(entry, pageNumber);
+  const existing = pendingRotationSaves.get(key);
+  if (existing) clearTimeout(existing.timer);
+  pendingRotationSaves.set(key, {
     entry,
     pageNumber,
     rotation,
-    timer: setTimeout(flushPendingRotationSave, ROTATION_SAVE_DEBOUNCE_MS),
-  };
-  setSaveStatus("saving");
+    timer: setTimeout(() => startRotationSave(key), ROTATION_SAVE_DEBOUNCE_MS),
+  });
+  updateSaveIndicators();
 }
 
-async function flushPendingRotationSave() {
-  if (!pendingRotationSave) return;
-  const { entry, pageNumber, rotation, timer } = pendingRotationSave;
-  clearTimeout(timer);
-  pendingRotationSave = null;
+async function startRotationSave(key) {
+  const pending = pendingRotationSaves.get(key);
+  if (!pending) return; // already started (or never scheduled) — nothing to do
+  clearTimeout(pending.timer);
+  pendingRotationSaves.delete(key);
+  if (inFlightRotationSaves.has(key)) return; // already writing this page
+  inFlightRotationSaves.add(key);
+  updateSaveIndicators();
 
+  const { entry, pageNumber, rotation } = pending;
   try {
     await savePageRotation(entry.handle, entry.file, pageNumber, rotation);
     entry.file = await entry.handle.getFile();
     entry.size = entry.file.size;
     entry.lastModified = entry.file.lastModified;
-    setSaveStatus("saved");
     refreshThumbnailFor(entry).catch((err) => {
       console.error(`Failed to refresh thumbnail for ${entry.name}:`, err);
     });
   } catch (err) {
     console.error(`Failed to save rotation for ${entry.name}:`, err);
-    setSaveStatus(null);
     // statusEl sits in the setup section, behind the full-screen viewer —
     // invisible in exactly the state this error can occur in. renameStatusEl
     // is the spot viewer-scoped errors (rename, filing) already use instead.
     setRenameStatus("error", `⚠️ Couldn't save rotation: ${err.message || err}`);
+  } finally {
+    inFlightRotationSaves.delete(key);
+    updateSaveIndicators();
   }
 }
 
+// Fires every still-scheduled save immediately instead of waiting out its
+// debounce timer — used before anything that shouldn't leave a rotation
+// unwritten (navigating away, deleting a page).
+async function flushAllPendingRotationSaves() {
+  await Promise.all([...pendingRotationSaves.keys()].map((key) => startRotationSave(key)));
+}
+
 async function openDocumentAt(index) {
-  flushPendingRotationSave();
+  flushAllPendingRotationSaves();
   closeDateModal();
   disarmDelete();
   viewerEl.classList.remove("keyboard-open");
@@ -599,13 +683,15 @@ async function openDocumentAt(index) {
 
   viewerState.index = index;
   viewerState.pageNumber = 1;
+  viewerState.showRightPage = false;
+  pageSlot2.hidden = true;
   pageNavPrev.hidden = true;
   pageNavNext.hidden = true;
 
   const entry = viewerState.entries[index];
   viewerState.rotationByPage = getRotationMapFor(entry);
   resetZoomPan();
-  setSaveStatus(null);
+  updateSaveIndicators();
   populateRenameBar(entry);
 
   viewerIndicator.textContent = "Loading…";
@@ -627,7 +713,7 @@ function openViewer(entries, index) {
 }
 
 async function closeViewer() {
-  flushPendingRotationSave();
+  flushAllPendingRotationSaves();
   closeDateModal();
   disarmDelete();
   viewerEl.classList.remove("keyboard-open");
@@ -758,6 +844,23 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener("resize", updateViewportOverlap);
   window.visualViewport.addEventListener("scroll", updateViewportOverlap);
 }
+
+// Re-renders the open document if rotating the tablet crosses the spread
+// breakpoint mid-view (isSpreadActive's own media query, defined above).
+// Entering spread mode snaps to the odd page number that starts the pair
+// containing whatever page was on screen, so the page you were looking at
+// stays visible rather than the view jumping elsewhere; leaving spread mode
+// needs no such adjustment since a single page is already just pageNumber.
+spreadQuery.addEventListener("change", () => {
+  if (viewerEl.hidden || !viewerState.pdf) return;
+  if (isSpreadActive() && viewerState.pageNumber % 2 === 0) {
+    viewerState.pageNumber -= 1;
+  }
+  resetZoomPan();
+  renderCurrentPage().catch((err) => {
+    console.error("Failed to re-render after a layout change:", err);
+  });
+});
 
 // --- Custom date picker ---
 // Android Chrome's native <input type="date"> picker only reports a value
@@ -1250,7 +1353,7 @@ async function fileCurrentDocumentTo(destinationName) {
   const oldName = entry.name;
   const sourceDirHandle = currentDirHandle;
 
-  await flushPendingRotationSave();
+  await flushAllPendingRotationSaves();
 
   let destDirHandle;
   try {
@@ -1360,35 +1463,35 @@ async function animateNavigation(axis, direction, performNavigation) {
     const enterOffset = -exitOffset;
     const translate = (px) => (axis === "x" ? `translateX(${px}px)` : `translateY(${px}px)`);
 
-    viewerCanvas.style.transition = `transform ${EXIT_MS}ms ease-in, opacity ${EXIT_MS}ms ease-in`;
+    viewerPagesEl.style.transition = `transform ${EXIT_MS}ms ease-in, opacity ${EXIT_MS}ms ease-in`;
     requestAnimationFrame(() => {
-      viewerCanvas.style.transform = translate(exitOffset);
-      viewerCanvas.style.opacity = "0";
+      viewerPagesEl.style.transform = translate(exitOffset);
+      viewerPagesEl.style.opacity = "0";
     });
     await wait(EXIT_MS);
 
     await performNavigation();
 
-    viewerCanvas.style.transition = "none";
-    viewerCanvas.style.transform = translate(enterOffset);
-    viewerCanvas.style.opacity = "0";
-    void viewerCanvas.offsetWidth; // force reflow so the next transition starts from here
+    viewerPagesEl.style.transition = "none";
+    viewerPagesEl.style.transform = translate(enterOffset);
+    viewerPagesEl.style.opacity = "0";
+    void viewerPagesEl.offsetWidth; // force reflow so the next transition starts from here
 
-    viewerCanvas.style.transition = `transform ${ENTER_MS}ms ease-out, opacity ${ENTER_MS}ms ease-out`;
+    viewerPagesEl.style.transition = `transform ${ENTER_MS}ms ease-out, opacity ${ENTER_MS}ms ease-out`;
     requestAnimationFrame(() => {
-      viewerCanvas.style.transform = "translate(0px, 0px)";
-      viewerCanvas.style.opacity = "1";
+      viewerPagesEl.style.transform = "translate(0px, 0px)";
+      viewerPagesEl.style.opacity = "1";
     });
     await wait(ENTER_MS);
-    viewerCanvas.style.transition = "";
+    viewerPagesEl.style.transition = "";
   } catch (err) {
     // If performNavigation threw (a corrupt neighboring page/document, a
-    // transient render failure), the canvas was left mid-exit — faded out
+    // transient render failure), the wrapper was left mid-exit — faded out
     // and translated off-screen. Put it back rather than leaving what looks
     // like a frozen viewer, and let the caller still report the error.
-    viewerCanvas.style.transition = "none";
-    viewerCanvas.style.transform = "translate(0px, 0px)";
-    viewerCanvas.style.opacity = "1";
+    viewerPagesEl.style.transition = "none";
+    viewerPagesEl.style.transform = "translate(0px, 0px)";
+    viewerPagesEl.style.opacity = "1";
     throw err;
   } finally {
     isNavigating = false;
@@ -1397,14 +1500,17 @@ async function animateNavigation(axis, direction, performNavigation) {
 
 function goToPage(delta) {
   if (!viewerState.pdf || isNavigating) return;
-  const next = viewerState.pageNumber + delta;
+  // A spread's "next"/"previous" always jumps a full pair — even a trailing
+  // odd-page-count spread that's currently showing just one page still has
+  // a well-defined start two pages on, so this needs no special case for it.
+  const step = isSpreadActive() ? delta * 2 : delta;
+  const next = viewerState.pageNumber + step;
   if (next < 1 || next > viewerState.pdf.numPages) return;
-  flushPendingRotationSave();
+  flushAllPendingRotationSaves();
   disarmDelete();
   animateNavigation("x", delta, async () => {
     viewerState.pageNumber = next;
     resetZoomPan();
-    setSaveStatus(null);
     await renderCurrentPage();
   }).catch((err) => {
     console.error("Failed to render page:", err);
@@ -1424,46 +1530,67 @@ function goToDocument(delta) {
 
 viewerCloseBtn.addEventListener("click", closeViewer);
 
-viewerRotateBtn.addEventListener("click", () => {
+// Both slots' rotate buttons funnel into this, parameterized by which page
+// number that slot currently shows — the left slot is always
+// viewerState.pageNumber, the right (only present in a spread) is always
+// pageNumber + 1.
+function handleRotateClick(pageNumber) {
   if (!viewerState.pdf) return;
-  const current = viewerState.rotationByPage.get(viewerState.pageNumber) || 0;
+  const current = viewerState.rotationByPage.get(pageNumber) || 0;
   const next = (current + 90) % 360;
-  viewerState.rotationByPage.set(viewerState.pageNumber, next);
+  viewerState.rotationByPage.set(pageNumber, next);
   resetZoomPan();
   renderCurrentPage().catch((err) => console.error("Failed to render page:", err));
 
   const entry = viewerState.entries[viewerState.index];
-  scheduleRotationSave(entry, viewerState.pageNumber, next);
-});
+  scheduleRotationSave(entry, pageNumber, next);
+}
+
+viewerRotateBtn.addEventListener("click", () => handleRotateClick(viewerState.pageNumber));
+viewerRotateBtn2.addEventListener("click", () => handleRotateClick(viewerState.pageNumber + 1));
 
 // --- Page deletion: tap arms the trash icon, a second tap on the same
 // page confirms. Disarms on any navigation so a later, unrelated tap can
-// never land as a confirm. ---
+// never land as a confirm. Only one page can be armed at a time (arming
+// the other slot's trash icon just re-targets it, same as any other
+// navigation) — unlike rotation there's no write in flight to lose here,
+// arming is purely a transient confirm-intent. ---
 
 let armedDeletePage = null; // { entry, pageNumber } while armed
 let armedDeleteTimer = null;
 const DELETE_ARM_TIMEOUT_MS = 3000;
 
+// Derives each delete button's armed look from current render state rather
+// than toggling a class once and leaving it — same reasoning as
+// updateSaveIndicators, since these buttons get reused for whatever page
+// number is currently in that slot.
+function updateDeleteArmedIndicators() {
+  const entry = viewerState.entries[viewerState.index];
+  const isArmed = (pageNumber) =>
+    !!armedDeletePage && armedDeletePage.entry === entry && armedDeletePage.pageNumber === pageNumber;
+  deletePageBtn.classList.toggle("armed", isArmed(viewerState.pageNumber));
+  deletePageBtn2.classList.toggle("armed", viewerState.showRightPage && isArmed(viewerState.pageNumber + 1));
+}
+
 function disarmDelete() {
   armedDeletePage = null;
-  deletePageBtn.classList.remove("armed");
   if (armedDeleteTimer) {
     clearTimeout(armedDeleteTimer);
     armedDeleteTimer = null;
   }
+  updateDeleteArmedIndicators();
 }
 
 function armDelete(entry, pageNumber) {
   armedDeletePage = { entry, pageNumber };
-  deletePageBtn.classList.add("armed");
   if (armedDeleteTimer) clearTimeout(armedDeleteTimer);
   armedDeleteTimer = setTimeout(disarmDelete, DELETE_ARM_TIMEOUT_MS);
+  updateDeleteArmedIndicators();
 }
 
-deletePageBtn.addEventListener("click", () => {
+function handleDeleteClick(pageNumber) {
   if (!viewerState.pdf) return;
   const entry = viewerState.entries[viewerState.index];
-  const pageNumber = viewerState.pageNumber;
 
   if (armedDeletePage && armedDeletePage.entry === entry && armedDeletePage.pageNumber === pageNumber) {
     disarmDelete();
@@ -1476,14 +1603,17 @@ deletePageBtn.addEventListener("click", () => {
   } else {
     armDelete(entry, pageNumber);
   }
-});
+}
+
+deletePageBtn.addEventListener("click", () => handleDeleteClick(viewerState.pageNumber));
+deletePageBtn2.addEventListener("click", () => handleDeleteClick(viewerState.pageNumber + 1));
 
 async function performPageDelete(entry, pageNumber) {
   const index = viewerState.index;
   const oldName = entry.name;
   const wasOnlyPage = viewerState.pdf.numPages === 1;
 
-  await flushPendingRotationSave();
+  await flushAllPendingRotationSaves();
   const backupBytes = await entry.file.arrayBuffer();
 
   if (wasOnlyPage) {
@@ -1526,7 +1656,12 @@ async function performPageDelete(entry, pageNumber) {
   const { pdf, loadingTask } = await loadDocument(entry.file);
   viewerState.pdf = pdf;
   viewerState.loadingTask = loadingTask;
-  viewerState.pageNumber = Math.min(pageNumber, newPageCount);
+  // Anchor on the spread's own left boundary (viewerState.pageNumber), not
+  // the page that was actually deleted — identical to it when the left
+  // page itself was deleted (the only case in single-page mode), but keeps
+  // a spread showing the same left page when it was the *right* one that
+  // got removed, rather than jumping the view forward.
+  viewerState.pageNumber = Math.min(viewerState.pageNumber, newPageCount);
   resetZoomPan();
   await renderCurrentPage();
 
